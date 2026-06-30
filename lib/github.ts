@@ -1,0 +1,235 @@
+export interface GitHubProjectItem {
+    id: string;
+    type: string;
+    content: {
+        __typename: string;
+        id?: string;
+        number?: number;
+        title?: string;
+        body?: string;
+        url?: string;
+        createdAt?: string;
+        closedAt?: string;
+        state?: string;
+        assignees?: {
+            nodes: Array<{
+                login: string;
+                name: string;
+                avatarUrl: string;
+            }>;
+        };
+        labels?: {
+            nodes: Array<{
+                name: string;
+                color: string;
+            }>;
+        };
+        repository?: {
+            nameWithOwner: string;
+        };
+    } | null;
+    fieldValues: {
+        nodes: Array<{
+            __typename: string;
+            name?: string;
+            field?: {
+                name: string;
+            };
+        }>;
+    };
+}
+
+export interface GitHubProjectData {
+    title: string;
+    items: GitHubProjectItem[];
+}
+
+const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
+
+function getHeaders() {
+    const token = process.env.GITHUB_TOKEN;
+    if (!token) {
+        throw new Error("GITHUB_TOKEN environment variable is not set");
+    }
+    return {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+    };
+}
+
+/**
+ * Fetch GitHub Project V2 items using GraphQL API
+ */
+export async function fetchGitHubProjectItems(
+    ownerLogin: string,
+    projectNumber: number,
+    ownerType: "user" | "organization" = "user"
+): Promise<GitHubProjectData> {
+    const ownerQuery =
+        ownerType === "organization"
+            ? `organization(login: "${ownerLogin}")`
+            : `user(login: "${ownerLogin}")`;
+
+    const query = `
+    query GetProjectItems($after: String) {
+      ${ownerQuery} {
+        projectV2(number: ${projectNumber}) {
+          title
+          items(first: 100, after: $after) {
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              type
+              content {
+                __typename
+                ... on Issue {
+                  id
+                  number
+                  title
+                  body
+                  url
+                  createdAt
+                  closedAt
+                  state
+                  assignees(first: 10) {
+                    nodes {
+                      login
+                      name
+                      avatarUrl
+                    }
+                  }
+                  labels(first: 10) {
+                    nodes {
+                      name
+                      color
+                    }
+                  }
+                  repository {
+                    nameWithOwner
+                  }
+                }
+                ... on PullRequest {
+                  id
+                  number
+                  title
+                  body
+                  url
+                  createdAt
+                  closedAt: mergedAt
+                  state
+                  assignees(first: 10) {
+                    nodes {
+                      login
+                      name
+                      avatarUrl
+                    }
+                  }
+                  labels(first: 10) {
+                    nodes {
+                      name
+                      color
+                    }
+                  }
+                  repository {
+                    nameWithOwner
+                  }
+                }
+              }
+              fieldValues(first: 20) {
+                nodes {
+                  __typename
+                  ... on ProjectV2ItemFieldSingleSelectValue {
+                    name
+                    field {
+                      ... on ProjectV2SingleSelectField {
+                        name
+                      }
+                    }
+                  }
+                  ... on ProjectV2ItemFieldTextValue {
+                    text
+                    field {
+                      ... on ProjectV2Field {
+                        name
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+    let allItems: GitHubProjectItem[] = [];
+    let hasNextPage = true;
+    let cursor: string | null = null;
+    let projectTitle = "";
+
+    while (hasNextPage) {
+        const variables: Record<string, string | null> = { after: cursor };
+
+        const response = await fetch(GITHUB_GRAPHQL_URL, {
+            method: "POST",
+            headers: getHeaders(),
+            body: JSON.stringify({ query, variables }),
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            throw new Error(`GitHub API error: ${response.status} - ${text}`);
+        }
+
+        const data = await response.json();
+
+        if (data.errors) {
+            throw new Error(
+                `GraphQL errors: ${JSON.stringify(data.errors, null, 2)}`
+            );
+        }
+
+        const owner = data.data?.[ownerType === "organization" ? "organization" : "user"];
+        const project = owner?.projectV2;
+
+        if (!project) {
+            throw new Error(
+                `Project #${projectNumber} not found for ${ownerLogin}. Make sure the project exists and token has access.`
+            );
+        }
+
+        projectTitle = project.title;
+        const items = project.items;
+
+        allItems = [...allItems, ...(items.nodes || [])];
+
+        hasNextPage = items.pageInfo.hasNextPage;
+        cursor = items.pageInfo.endCursor;
+    }
+
+    return {
+        title: projectTitle,
+        items: allItems,
+    };
+}
+
+/**
+ * Parse status from GitHub Project field values
+ */
+export function parseStatusFromFieldValues(
+    fieldValues: GitHubProjectItem["fieldValues"]
+): string {
+    for (const node of fieldValues.nodes) {
+        if (
+            node.__typename === "ProjectV2ItemFieldSingleSelectValue" &&
+            node.field?.name?.toLowerCase() === "status"
+        ) {
+            return node.name || "Todo";
+        }
+    }
+    return "Todo";
+}

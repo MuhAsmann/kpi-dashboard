@@ -23,7 +23,8 @@ function mapStatusToEnum(statusStr: string): TaskStatus {
         normalized.includes("inprogress") ||
         normalized.includes("progress") ||
         normalized.includes("doing") ||
-        normalized.includes("wip")
+        normalized.includes("wip") ||
+        normalized.includes("deployedstaging")
     ) {
         return "IN_PROGRESS";
     }

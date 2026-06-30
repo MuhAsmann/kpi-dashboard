@@ -114,6 +114,7 @@ const columns: Array<{
         { key: "completed_tasks", label: "Completed", sortable: true },
         { key: "completion_rate", label: "Completion Rate", sortable: true },
         { key: "avg_cycle_time_days", label: "Avg Cycle Time", sortable: true },
+        { key: "bugs_count", label: "Bugs", sortable: true },
         { key: null, label: "Active" },
     ];
 
@@ -298,6 +299,17 @@ export default function KPITable({
                                                 )}
                                             </td>
 
+                                            {/* Bugs */}
+                                            <td className="text-center">
+                                                {kpi.metrics.bugs_count > 0 ? (
+                                                    <span className="font-semibold" style={{ color: "#ef4444" }}>
+                                                        {kpi.metrics.bugs_count}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: "var(--text-muted)" }}>0</span>
+                                                )}
+                                            </td>
+
                                             {/* Active Tasks */}
                                             <td>
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -312,7 +324,12 @@ export default function KPITable({
                                                             {kpi.metrics.todo_tasks} Todo
                                                         </span>
                                                     )}
-                                                    {kpi.metrics.active_tasks === 0 && (
+                                                    {kpi.metrics.overdue_tasks > 0 && (
+                                                        <span className="badge badge-cancelled">
+                                                            {kpi.metrics.overdue_tasks} Overdue
+                                                        </span>
+                                                    )}
+                                                    {kpi.metrics.active_tasks === 0 && kpi.metrics.overdue_tasks === 0 && (
                                                         <span className="badge badge-done">All done</span>
                                                     )}
                                                 </div>
@@ -335,12 +352,24 @@ export default function KPITable({
                                                                 {kpi.tasks.map(task => (
                                                                     <div key={task.id} className="p-4 rounded-lg bg-[rgba(31,41,55,0.4)] border border-[rgba(55,65,81,0.5)] hover:bg-[rgba(55,65,81,0.3)] transition-colors">
                                                                         <div className="flex justify-between items-start mb-2">
-                                                                            <a href={task.url || "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-[var(--accent-light)] hover:underline flex-1 pr-4 line-clamp-2">
+                                                                            <a href={task.url || "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-(--accent-light) hover:underline flex-1 pr-4 line-clamp-2">
                                                                                 {task.title}
                                                                             </a>
-                                                                            <span className={`badge shrink-0 ${task.status === 'DONE' ? 'badge-done' : task.status === 'IN_PROGRESS' ? 'badge-in-progress' : task.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-todo'}`}>
-                                                                                {task.status.replace("_", " ")}
-                                                                            </span>
+                                                                            <div className="flex gap-2 shrink-0 items-center">
+                                                                                {task.is_overdue && (
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2" }}>
+                                                                                        ⚠️ Overdue
+                                                                                    </span>
+                                                                                )}
+                                                                                {task.bug_count > 0 && (
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.3)" }}>
+                                                                                        🐞 {task.bug_count} Bug{task.bug_count > 1 ? 's' : ''}
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className={`badge shrink-0 ${task.status === 'DONE' ? 'badge-done' : task.status === 'IN_PROGRESS' ? 'badge-in-progress' : task.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-todo'}`}>
+                                                                                    {task.status.replace("_", " ")}
+                                                                                </span>
+                                                                            </div>
                                                                         </div>
 
                                                                         <div className="flex items-center justify-between mt-3 text-xs text-[var(--text-muted)]">

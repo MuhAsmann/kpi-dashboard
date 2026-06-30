@@ -2,7 +2,8 @@ export type SortField =
     | "completion_rate"
     | "completed_tasks"
     | "total_tasks"
-    | "avg_cycle_time_days";
+    | "avg_cycle_time_days"
+    | "bugs_count";
 
 export interface DashboardFilters {
     startDate: string;

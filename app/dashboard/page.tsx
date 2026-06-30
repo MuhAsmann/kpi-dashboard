@@ -53,6 +53,10 @@ export default function DashboardPage() {
                         aVal = a.metrics.avg_cycle_time_days ?? 9999;
                         bVal = b.metrics.avg_cycle_time_days ?? 9999;
                         break;
+                    case "bugs_count":
+                        aVal = a.metrics.bugs_count;
+                        bVal = b.metrics.bugs_count;
+                        break;
                     default:
                         aVal = a.metrics.completion_rate;
                         bVal = b.metrics.completion_rate;

@@ -31,6 +31,9 @@ model Task {
   url             String?
   created_at      DateTime
   closed_at       DateTime?
+  start_date      DateTime?
+  end_date        DateTime?
+  type            String?   @default("Issue") // "Issue" or "PullRequest"
   updated_at      DateTime  @updatedAt
   status          TaskStatus @default(TODO)
   repository      String?

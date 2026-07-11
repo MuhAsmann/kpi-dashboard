@@ -30,6 +30,8 @@ export interface UserKPI {
         in_progress_tasks: number;
         bugs_count: number;
         overdue_tasks: number;
+        total_story_points: number;
+        tasks_without_sp: number;
     };
     tasks: {
         id: string;
@@ -44,6 +46,7 @@ export interface UserKPI {
         type: string | null;
         is_overdue: boolean;
         bug_count: number;
+        story_points: number | null;
         labels: { name: string; color: string | null }[];
     }[];
 }
@@ -155,6 +158,8 @@ export async function calculateAllUserKPIs(
                     in_progress_tasks: inProgressTasks,
                     bugs_count: bugsCount,
                     overdue_tasks: overdueTasks,
+                    total_story_points: tasks.reduce((sum: number, t: TaskWithRelations) => sum + (t.story_points ?? 0), 0),
+                    tasks_without_sp: tasks.filter((t: TaskWithRelations) => t.story_points == null).length,
                 },
                 tasks: tasks.map((t: TaskWithRelations) => {
                     let isOverdue = false;
@@ -186,6 +191,7 @@ export async function calculateAllUserKPIs(
                         type: t.type,
                         is_overdue: isOverdue,
                         bug_count: issueBugCount,
+                        story_points: t.story_points ?? null,
                         labels: t.labels.map((l) => ({ name: l.name, color: l.color })),
                     };
                 }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),

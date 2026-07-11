@@ -34,6 +34,7 @@ export interface GitHubProjectItem {
       name?: string;
       text?: string;
       date?: string;
+      number?: number;
       field?: {
         name: string;
       };
@@ -167,6 +168,14 @@ export async function fetchGitHubProjectItems(
                       }
                     }
                   }
+                  ... on ProjectV2ItemFieldNumberValue {
+                    number
+                    field {
+                      ... on ProjectV2Field {
+                        name
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -256,6 +265,24 @@ export function parseDateFromFieldValues(
       const nameLower = node.field.name.toLowerCase();
       if (fieldNameKeywords.some((keyword) => nameLower.includes(keyword))) {
         return node.date || null;
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Parse number value from GitHub Project field values (e.g. Story Points)
+ */
+export function parseNumberFromFieldValues(
+  fieldValues: GitHubProjectItem["fieldValues"],
+  fieldNameKeywords: string[]
+): number | null {
+  for (const node of fieldValues.nodes) {
+    if (node.__typename === "ProjectV2ItemFieldNumberValue" && node.field?.name) {
+      const nameLower = node.field.name.toLowerCase();
+      if (fieldNameKeywords.some((keyword) => nameLower.includes(keyword))) {
+        return node.number ?? null;
       }
     }
   }

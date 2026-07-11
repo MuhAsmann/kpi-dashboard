@@ -1,7 +1,7 @@
 "use client";
 
 import { UserKPI } from "@/lib/kpi-service";
-import { ChevronUp, ChevronDown, ChevronsUpDown, ExternalLink, List, Calendar } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, ExternalLink, List, Calendar, Zap } from "lucide-react";
 import Image from "next/image";
 import { SortField } from "@/types/dashboard";
 import { useState, Fragment } from "react";
@@ -73,7 +73,7 @@ function RankBadge({ rank }: { rank: number }) {
 function SkeletonRow() {
     return (
         <tr>
-            {[40, 160, 60, 60, 140, 80, 100].map((width, i) => (
+            {[40, 160, 60, 60, 140, 80, 80, 100].map((width, i) => (
                 <td key={i} style={{ padding: "16px" }}>
                     <div
                         className="h-4 rounded animate-pulse"
@@ -88,7 +88,7 @@ function SkeletonRow() {
 function EmptyState() {
     return (
         <tr>
-            <td colSpan={7} className="text-center py-16">
+            <td colSpan={8} className="text-center py-16">
                 <div style={{ color: "var(--text-muted)" }}>
                     <div className="text-4xl mb-3">📊</div>
                     <p className="font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
@@ -115,6 +115,7 @@ const columns: Array<{
         { key: "completion_rate", label: "Completion Rate", sortable: true },
         { key: "avg_cycle_time_days", label: "Avg Cycle Time", sortable: true },
         { key: "bugs_count", label: "Bugs", sortable: true },
+        { key: null, label: "SP" },
         { key: null, label: "Active" },
     ];
 
@@ -310,6 +311,25 @@ export default function KPITable({
                                                 )}
                                             </td>
 
+                                            {/* Story Points */}
+                                            <td className="text-center">
+                                                {kpi.metrics.total_story_points > 0 ? (
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span className="font-semibold flex items-center gap-1" style={{ color: "#a78bfa" }}>
+                                                            <Zap size={12} />
+                                                            {kpi.metrics.total_story_points}
+                                                        </span>
+                                                        {kpi.metrics.tasks_without_sp > 0 && (
+                                                            <span className="text-[10px]" style={{ color: "#f59e0b" }}>
+                                                                {kpi.metrics.tasks_without_sp} no SP
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[11px]" style={{ color: "#f59e0b" }}>No SP</span>
+                                                )}
+                                            </td>
+
                                             {/* Active Tasks */}
                                             <td>
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -338,7 +358,7 @@ export default function KPITable({
 
                                         {isExpanded && (
                                             <tr className="bg-[rgba(17,24,39,0.3)]">
-                                                <td colSpan={7} className="p-0 border-b border-[rgba(31,41,55,0.5)]">
+                                                <td colSpan={8} className="p-0 border-b border-[rgba(31,41,55,0.5)]">
                                                     <div className="p-6">
                                                         <div className="flex items-center gap-2 mb-4">
                                                             <List size={16} style={{ color: "var(--text-muted)" }} />
@@ -355,7 +375,16 @@ export default function KPITable({
                                                                             <a href={task.url || "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-(--accent-light) hover:underline flex-1 pr-4 line-clamp-2">
                                                                                 {task.title}
                                                                             </a>
-                                                                            <div className="flex gap-2 shrink-0 items-center">
+                                                                            <div className="flex gap-2 shrink-0 items-center flex-wrap justify-end">
+                                                                                {task.story_points != null ? (
+                                                                                    <span className="flex items-center gap-1" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(167, 139, 250, 0.15)", color: "#a78bfa", border: "1px solid rgba(167, 139, 250, 0.3)", borderRadius: "4px", fontWeight: 600 }}>
+                                                                                        <Zap size={9} />{task.story_points} SP
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="flex items-center gap-1" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(245, 158, 11, 0.1)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "4px", fontWeight: 500 }}>
+                                                                                        ⚠ No SP
+                                                                                    </span>
+                                                                                )}
                                                                                 {task.is_overdue && (
                                                                                     <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2" }}>
                                                                                         ⚠️ Overdue

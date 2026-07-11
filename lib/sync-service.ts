@@ -3,6 +3,7 @@ import {
     fetchGitHubProjectItems,
     parseStatusFromFieldValues,
     parseDateFromFieldValues,
+    parseNumberFromFieldValues,
 } from "@/lib/github";
 import {
     createSyncLog,
@@ -112,6 +113,7 @@ export async function syncGitHubProject(): Promise<{
 
             const startDateStr = parseDateFromFieldValues(item.fieldValues, ["start"]);
             const endDateStr = parseDateFromFieldValues(item.fieldValues, ["end", "due", "target"]);
+            const storyPoints = parseNumberFromFieldValues(item.fieldValues, ["story", "point", "sp", "estimate", "size"]);
 
             // Upsert the task
             const task = await upsertTask({
@@ -129,6 +131,7 @@ export async function syncGitHubProject(): Promise<{
                 assignee_id: assigneeId,
                 repository: content.repository?.nameWithOwner,
                 project_title: projectData.title,
+                story_points: storyPoints,
             });
 
             // Upsert labels

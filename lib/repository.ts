@@ -45,6 +45,7 @@ export async function upsertTask(data: {
     assignee_id?: string | null;
     repository?: string | null;
     project_title?: string | null;
+    story_points?: number | null;
 }): Promise<Task> {
     return prisma.task.upsert({
         where: { github_issue_id: data.github_issue_id },
@@ -60,6 +61,7 @@ export async function upsertTask(data: {
             assignee_id: data.assignee_id,
             repository: data.repository,
             project_title: data.project_title,
+            story_points: data.story_points,
         },
         create: {
             github_issue_id: data.github_issue_id,
@@ -76,6 +78,7 @@ export async function upsertTask(data: {
             assignee_id: data.assignee_id,
             repository: data.repository,
             project_title: data.project_title,
+            story_points: data.story_points,
         },
     });
 }

@@ -22,13 +22,21 @@ export default function DashboardPage() {
     const [summary, setSummary] = useState<DashboardSummary | null>(null);
     const [repositories, setRepositories] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
-    const [filters, setFilters] = useState<DashboardFilters>({
-        startDate: "",
-        endDate: "",
-        repository: "",
-        sortBy: "completion_rate",
-        sortOrder: "desc",
-    });
+    const getDefaultFilters = (): DashboardFilters => {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        const toDateString = (d: Date) => d.toISOString().split("T")[0];
+        return {
+            startDate: toDateString(firstDay),
+            endDate: toDateString(lastDay),
+            repository: "",
+            sortBy: "completion_rate",
+            sortOrder: "desc",
+        };
+    };
+
+    const [filters, setFilters] = useState<DashboardFilters>(getDefaultFilters());
 
     const sortKPIs = useCallback(
         (data: UserKPI[], sortBy: SortField, sortOrder: "asc" | "desc"): UserKPI[] => {

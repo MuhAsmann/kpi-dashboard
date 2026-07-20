@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "tasks" ALTER COLUMN "story_points" SET DATA TYPE DOUBLE PRECISION;

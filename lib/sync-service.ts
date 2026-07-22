@@ -2,6 +2,8 @@ import { TaskStatus } from "@prisma/client";
 import {
     fetchGitHubProjectItems,
     parseStatusFromFieldValues,
+    parseDateFromFieldValues,
+    parseNumberFromFieldValues,
 } from "@/lib/github";
 import {
     createSyncLog,
@@ -109,6 +111,10 @@ export async function syncGitHubProject(): Promise<{
                 assigneeId = user.id;
             }
 
+            const startDateStr = parseDateFromFieldValues(item.fieldValues, ["start"]);
+            const endDateStr = parseDateFromFieldValues(item.fieldValues, ["end", "due", "target"]);
+            const storyPoints = parseNumberFromFieldValues(item.fieldValues, ["story", "point", "sp", "estimate", "size"]);
+
             // Upsert the task
             const task = await upsertTask({
                 github_issue_id: content.id,
@@ -118,10 +124,14 @@ export async function syncGitHubProject(): Promise<{
                 url: content.url,
                 created_at: new Date(content.createdAt!),
                 closed_at: content.closedAt ? new Date(content.closedAt) : null,
+                start_date: startDateStr ? new Date(startDateStr) : null,
+                end_date: endDateStr ? new Date(endDateStr) : null,
+                type: content.__typename === "PullRequest" ? "PullRequest" : "Issue",
                 status: taskStatus,
                 assignee_id: assigneeId,
                 repository: content.repository?.nameWithOwner,
                 project_title: projectData.title,
+                story_points: storyPoints,
             });
 
             // Upsert labels

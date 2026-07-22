@@ -38,10 +38,14 @@ export async function upsertTask(data: {
     url?: string | null;
     created_at: Date;
     closed_at?: Date | null;
+    start_date?: Date | null;
+    end_date?: Date | null;
+    type?: string | null;
     status: TaskStatus;
     assignee_id?: string | null;
     repository?: string | null;
     project_title?: string | null;
+    story_points?: number | null;
 }): Promise<Task> {
     return prisma.task.upsert({
         where: { github_issue_id: data.github_issue_id },
@@ -50,10 +54,14 @@ export async function upsertTask(data: {
             body: data.body,
             url: data.url,
             closed_at: data.closed_at,
+            start_date: data.start_date,
+            end_date: data.end_date,
+            type: data.type,
             status: data.status,
             assignee_id: data.assignee_id,
             repository: data.repository,
             project_title: data.project_title,
+            story_points: data.story_points,
         },
         create: {
             github_issue_id: data.github_issue_id,
@@ -63,10 +71,14 @@ export async function upsertTask(data: {
             url: data.url,
             created_at: data.created_at,
             closed_at: data.closed_at,
+            start_date: data.start_date,
+            end_date: data.end_date,
+            type: data.type,
             status: data.status,
             assignee_id: data.assignee_id,
             repository: data.repository,
             project_title: data.project_title,
+            story_points: data.story_points,
         },
     });
 }

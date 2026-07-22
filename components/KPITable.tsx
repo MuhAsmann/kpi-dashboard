@@ -1,7 +1,7 @@
 "use client";
 
 import { UserKPI } from "@/lib/kpi-service";
-import { ChevronUp, ChevronDown, ChevronsUpDown, ExternalLink, List, Calendar } from "lucide-react";
+import { ChevronUp, ChevronDown, ChevronsUpDown, ExternalLink, List, Calendar, Zap } from "lucide-react";
 import Image from "next/image";
 import { SortField } from "@/types/dashboard";
 import { useState, Fragment } from "react";
@@ -73,7 +73,7 @@ function RankBadge({ rank }: { rank: number }) {
 function SkeletonRow() {
     return (
         <tr>
-            {[40, 160, 60, 60, 140, 80, 100].map((width, i) => (
+            {[40, 160, 60, 60, 140, 80, 80, 100].map((width, i) => (
                 <td key={i} style={{ padding: "16px" }}>
                     <div
                         className="h-4 rounded animate-pulse"
@@ -88,7 +88,7 @@ function SkeletonRow() {
 function EmptyState() {
     return (
         <tr>
-            <td colSpan={7} className="text-center py-16">
+            <td colSpan={8} className="text-center py-16">
                 <div style={{ color: "var(--text-muted)" }}>
                     <div className="text-4xl mb-3">📊</div>
                     <p className="font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
@@ -114,6 +114,8 @@ const columns: Array<{
         { key: "completed_tasks", label: "Completed", sortable: true },
         { key: "completion_rate", label: "Completion Rate", sortable: true },
         { key: "avg_cycle_time_days", label: "Avg Cycle Time", sortable: true },
+        { key: "bugs_count", label: "Bugs", sortable: true },
+        { key: null, label: "SP" },
         { key: null, label: "Active" },
     ];
 
@@ -298,6 +300,36 @@ export default function KPITable({
                                                 )}
                                             </td>
 
+                                            {/* Bugs */}
+                                            <td className="text-center">
+                                                {kpi.metrics.bugs_count > 0 ? (
+                                                    <span className="font-semibold" style={{ color: "#ef4444" }}>
+                                                        {kpi.metrics.bugs_count}
+                                                    </span>
+                                                ) : (
+                                                    <span style={{ color: "var(--text-muted)" }}>0</span>
+                                                )}
+                                            </td>
+
+                                            {/* Story Points */}
+                                            <td className="text-center">
+                                                {kpi.metrics.total_story_points > 0 ? (
+                                                    <div className="flex flex-col items-center gap-0.5">
+                                                        <span className="font-semibold flex items-center gap-1" style={{ color: "#a78bfa" }}>
+                                                            <Zap size={12} />
+                                                            {kpi.metrics.total_story_points}
+                                                        </span>
+                                                        {kpi.metrics.tasks_without_sp > 0 && (
+                                                            <span className="text-[10px]" style={{ color: "#f59e0b" }}>
+                                                                {kpi.metrics.tasks_without_sp} no SP
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-[11px]" style={{ color: "#f59e0b" }}>No SP</span>
+                                                )}
+                                            </td>
+
                                             {/* Active Tasks */}
                                             <td>
                                                 <div className="flex items-center gap-2 flex-wrap">
@@ -312,7 +344,12 @@ export default function KPITable({
                                                             {kpi.metrics.todo_tasks} Todo
                                                         </span>
                                                     )}
-                                                    {kpi.metrics.active_tasks === 0 && (
+                                                    {kpi.metrics.overdue_tasks > 0 && (
+                                                        <span className="badge badge-cancelled">
+                                                            {kpi.metrics.overdue_tasks} Overdue
+                                                        </span>
+                                                    )}
+                                                    {kpi.metrics.active_tasks === 0 && kpi.metrics.overdue_tasks === 0 && (
                                                         <span className="badge badge-done">All done</span>
                                                     )}
                                                 </div>
@@ -321,7 +358,7 @@ export default function KPITable({
 
                                         {isExpanded && (
                                             <tr className="bg-[rgba(17,24,39,0.3)]">
-                                                <td colSpan={7} className="p-0 border-b border-[rgba(31,41,55,0.5)]">
+                                                <td colSpan={8} className="p-0 border-b border-[rgba(31,41,55,0.5)]">
                                                     <div className="p-6">
                                                         <div className="flex items-center gap-2 mb-4">
                                                             <List size={16} style={{ color: "var(--text-muted)" }} />
@@ -335,12 +372,33 @@ export default function KPITable({
                                                                 {kpi.tasks.map(task => (
                                                                     <div key={task.id} className="p-4 rounded-lg bg-[rgba(31,41,55,0.4)] border border-[rgba(55,65,81,0.5)] hover:bg-[rgba(55,65,81,0.3)] transition-colors">
                                                                         <div className="flex justify-between items-start mb-2">
-                                                                            <a href={task.url || "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-[var(--accent-light)] hover:underline flex-1 pr-4 line-clamp-2">
+                                                                            <a href={task.url || "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-(--accent-light) hover:underline flex-1 pr-4 line-clamp-2">
                                                                                 {task.title}
                                                                             </a>
-                                                                            <span className={`badge shrink-0 ${task.status === 'DONE' ? 'badge-done' : task.status === 'IN_PROGRESS' ? 'badge-in-progress' : task.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-todo'}`}>
-                                                                                {task.status.replace("_", " ")}
-                                                                            </span>
+                                                                            <div className="flex gap-2 shrink-0 items-center flex-wrap justify-end">
+                                                                                {task.story_points != null ? (
+                                                                                    <span className="flex items-center gap-1" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(167, 139, 250, 0.15)", color: "#a78bfa", border: "1px solid rgba(167, 139, 250, 0.3)", borderRadius: "4px", fontWeight: 600 }}>
+                                                                                        <Zap size={9} />{task.story_points} SP
+                                                                                    </span>
+                                                                                ) : (
+                                                                                    <span className="flex items-center gap-1" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(245, 158, 11, 0.1)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "4px", fontWeight: 500 }}>
+                                                                                        ⚠ No SP
+                                                                                    </span>
+                                                                                )}
+                                                                                {task.is_overdue && (
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2" }}>
+                                                                                        ⚠️ Overdue
+                                                                                    </span>
+                                                                                )}
+                                                                                {task.bug_count > 0 && (
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.3)" }}>
+                                                                                        🐞 {task.bug_count} Bug{task.bug_count > 1 ? 's' : ''}
+                                                                                    </span>
+                                                                                )}
+                                                                                <span className={`badge shrink-0 ${task.status === 'DONE' ? 'badge-done' : task.status === 'IN_PROGRESS' ? 'badge-in-progress' : task.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-todo'}`}>
+                                                                                    {task.status.replace("_", " ")}
+                                                                                </span>
+                                                                            </div>
                                                                         </div>
 
                                                                         <div className="flex items-center justify-between mt-3 text-xs text-[var(--text-muted)]">

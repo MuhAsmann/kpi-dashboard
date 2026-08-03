@@ -245,12 +245,19 @@ export async function getRepositories(): Promise<string[]> {
 /**
  * Get summary stats for dashboard header
  */
-export async function getDashboardSummary() {
-    const [totalTasks, completedTasks, activeUsers, lastSync] = await Promise.all(
+export async function getDashboardSummary(filters?: KPIFilters) {
+    const taskWhere = buildTaskFilter(filters);
+
+    const [totalTasks, completedTasks, activeTasks, activeUsers, storyPointsResult, lastSync] = await Promise.all(
         [
-            prisma.task.count(),
-            prisma.task.count({ where: { status: "DONE" } }),
-            prisma.user.count({ where: { tasks: { some: {} } } }),
+            prisma.task.count({ where: taskWhere }),
+            prisma.task.count({ where: { ...taskWhere, status: "DONE" } }),
+            prisma.task.count({ where: { ...taskWhere, status: { in: ["TODO", "IN_PROGRESS"] } } }),
+            prisma.user.count({ where: { tasks: { some: taskWhere } } }),
+            prisma.task.aggregate({
+                where: taskWhere,
+                _sum: { story_points: true }
+            }),
             prisma.syncLog.findFirst({
                 where: { status: "SUCCESS" },
                 orderBy: { finished_at: "desc" },
@@ -261,7 +268,9 @@ export async function getDashboardSummary() {
     return {
         total_tasks: totalTasks,
         completed_tasks: completedTasks,
+        active_tasks: activeTasks,
         active_users: activeUsers,
+        total_story_points: storyPointsResult._sum.story_points ?? 0,
         last_sync: lastSync?.finished_at ?? null,
     };
 }

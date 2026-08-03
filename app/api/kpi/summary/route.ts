@@ -1,10 +1,21 @@
-import { NextResponse } from "next/server";
-import { getDashboardSummary, getRepositories } from "@/lib/kpi-service";
+import { NextRequest, NextResponse } from "next/server";
+import { getDashboardSummary, getRepositories, KPIFilters } from "@/lib/kpi-service";
 
-export async function GET() {
+export async function GET(request: NextRequest) {
     try {
+        const searchParams = request.nextUrl.searchParams;
+        const filters: KPIFilters = {};
+
+        const startDate = searchParams.get("start_date");
+        const endDate = searchParams.get("end_date");
+        const repository = searchParams.get("repository");
+
+        if (startDate) filters.startDate = new Date(startDate);
+        if (endDate) filters.endDate = new Date(endDate);
+        if (repository) filters.repository = repository;
+
         const [summary, repositories] = await Promise.all([
-            getDashboardSummary(),
+            getDashboardSummary(filters),
             getRepositories(),
         ]);
 

@@ -1,12 +1,14 @@
 "use client";
 
-import { CheckSquare, Users, TrendingUp, Clock } from "lucide-react";
+import { CheckSquare, Users, TrendingUp, Clock, ListTodo, Target } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface SummaryData {
     total_tasks: number;
     completed_tasks: number;
+    active_tasks: number;
     active_users: number;
+    total_story_points: number;
     last_sync: string | null;
 }
 
@@ -64,12 +66,28 @@ export default function SummaryCards({ summary, loading }: SummaryCardsProps) {
             color: "#f59e0b",
             bg: "rgba(245,158,11,0.1)",
         },
+        {
+            id: "active-tasks-card",
+            label: "Active Tasks",
+            value: summary?.active_tasks ?? 0,
+            icon: ListTodo,
+            color: "#8b5cf6",
+            bg: "rgba(139,92,246,0.1)",
+        },
+        {
+            id: "story-points-card",
+            label: "Story Points",
+            value: summary?.total_story_points ?? 0,
+            icon: Target,
+            color: "#ec4899",
+            bg: "rgba(236,72,153,0.1)",
+        },
     ];
 
     if (loading) {
         return (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                {[1, 2, 3, 4].map((i) => (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+                {[1, 2, 3, 4, 5, 6].map((i) => (
                     <SkeletonCard key={i} />
                 ))}
             </div>
@@ -78,7 +96,7 @@ export default function SummaryCards({ summary, loading }: SummaryCardsProps) {
 
     return (
         <div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
                 {cards.map((card) => {
                     const Icon = card.icon;
                     return (

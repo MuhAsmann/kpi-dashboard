@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { UserKPI } from "@/lib/kpi-service";
 import { DashboardFilters, SortField } from "@/types/dashboard";
 import SyncButton from "@/components/SyncButton";
+import ExportButton from "@/components/ExportButton";
 import KPITable from "@/components/KPITable";
 import SummaryCards from "@/components/SummaryCards";
 import FilterBar from "@/components/FilterBar";
@@ -13,7 +14,9 @@ import { Activity, GitBranch } from "lucide-react";
 interface DashboardSummary {
     total_tasks: number;
     completed_tasks: number;
+    active_tasks: number;
     active_users: number;
+    total_story_points: number;
     last_sync: string | null;
 }
 
@@ -86,7 +89,7 @@ export default function DashboardPage() {
 
             const [kpiRes, summaryRes] = await Promise.all([
                 fetch(`/api/kpi/users?${params.toString()}`),
-                fetch("/api/kpi/summary"),
+                fetch(`/api/kpi/summary?${params.toString()}`),
             ]);
 
             const kpiData = await kpiRes.json();
@@ -188,6 +191,7 @@ export default function DashboardPage() {
                                 <GitBranch size={14} />
                                 <span className="hidden sm:inline">GitHub</span>
                             </a>
+                            <ExportButton filters={filters} />
                             <SyncButton onSyncComplete={fetchData} />
                         </div>
                     </div>

@@ -69,6 +69,7 @@ enum TaskStatus {
   IN_PROGRESS
   DONE
   CANCELLED
+  STAGING
 }
 
 enum SyncStatus {

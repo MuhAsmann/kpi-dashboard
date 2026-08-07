@@ -27,10 +27,6 @@ interface DashboardSummary {
 const NAV_ITEMS: { icon: typeof LayoutDashboard; label: string; active?: boolean; href?: string }[] = [
     { icon: LayoutDashboard, label: "Dashboard", active: true },
     { icon: CalendarIcon, label: "Calendar", href: "/calendar" },
-    { icon: ListChecks, label: "Tasks" },
-    { icon: GitBranch, label: "Repositories" },
-    { icon: Clock, label: "Cycle time" },
-    { icon: BarChart3, label: "Reports" },
 ];
 
 function Sidebar() {

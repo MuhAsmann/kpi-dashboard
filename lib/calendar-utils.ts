@@ -69,6 +69,9 @@ export function buildSegments(task: CalendarTask, todayMs: number): CalendarSegm
             segments.push({ status: points[i].status, start: segStart, end: segEnd });
         }
     }
+    if (segments.length === 0) {
+        return [{ status: points[points.length - 1].status, start: finalEndMs, end: finalEndMs }];
+    }
     return segments;
 }
 

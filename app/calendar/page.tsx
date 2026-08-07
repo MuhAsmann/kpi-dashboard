@@ -16,8 +16,11 @@ import {
     navigateAnchor,
     colorForKey,
     buildSegmentBlocks,
+    getWeekStart,
+    packLanes,
     MONTH_NAMES,
     DOW_NAMES,
+    DAY_MS,
 } from "@/lib/calendar-utils";
 import {
     LayoutDashboard,
@@ -166,11 +169,18 @@ export default function CalendarPage() {
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
 
     const anchorDate = new Date(anchorMs);
+    const weekStartMs = useMemo(() => getWeekStart(anchorMs), [anchorMs]);
     const toolbarTitle =
         view === "month"
             ? `${MONTH_NAMES[anchorDate.getUTCMonth()]} ${anchorDate.getUTCFullYear()}`
             : view === "week"
-                ? "" // filled in Task 6
+                ? (() => {
+                    const start = new Date(weekStartMs);
+                    const end = new Date(weekStartMs + 6 * DAY_MS);
+                    const startLabel = `${MONTH_NAMES[start.getUTCMonth()].slice(0, 3)} ${start.getUTCDate()}`;
+                    const endLabel = `${MONTH_NAMES[end.getUTCMonth()].slice(0, 3)} ${end.getUTCDate()}, ${end.getUTCFullYear()}`;
+                    return `${startLabel} – ${endLabel}`;
+                })()
                 : ""; // filled in Task 7
 
     const segStyle = (on: boolean): React.CSSProperties => ({
@@ -210,6 +220,10 @@ export default function CalendarPage() {
     const monthWeeks = useMemo(
         () => (view === "month" ? computeMonthWeeks(anchorMs, filteredTasks, todayMs) : []),
         [view, anchorMs, filteredTasks, todayMs]
+    );
+    const weekLayout = useMemo(
+        () => (view === "week" ? packLanes(weekStartMs, filteredTasks, 12) : { placed: [], hiddenPerDay: [0, 0, 0, 0, 0, 0, 0] }),
+        [view, weekStartMs, filteredTasks]
     );
 
     const hasActiveFilters = !!(filters.repository || filters.assignee || filters.label || filters.status);
@@ -561,6 +575,68 @@ export default function CalendarPage() {
                                         </p>
                                     </div>
                                 )}
+                            </div>
+                        )}
+
+                        {view === "week" && (
+                            <div style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)" }}>
+                                <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "2px solid var(--card-border)" }}>
+                                    {Array.from({ length: 7 }, (_, i) => weekStartMs + i * DAY_MS).map((dateMs) => {
+                                        const d = new Date(dateMs);
+                                        const isToday = dateMs === todayMs;
+                                        return (
+                                            <div key={dateMs} style={{ padding: "10px 12px", borderLeft: "1.5px dashed var(--dashed)", background: isToday ? "var(--card-alt)" : "transparent" }}>
+                                                <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: "10.5px", fontWeight: 700, textTransform: "uppercase", color: "var(--text-muted)" }}>
+                                                    {DOW_NAMES[d.getUTCDay()].slice(0, 3)}
+                                                </div>
+                                                <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: "20px", fontWeight: 700, color: isToday ? "var(--text-primary)" : "var(--text-secondary)" }}>
+                                                    {d.getUTCDate()}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                                <div style={{ position: "relative", minHeight: `${Math.max(160, 28 + weekLayout.placed.reduce((m, x) => Math.max(m, x.lane + 1), 0) * 44)}px` }}>
+                                    <div className="absolute inset-0 grid" style={{ gridTemplateColumns: "repeat(7, 1fr)" }}>
+                                        {Array.from({ length: 7 }, (_, i) => i).map((i) => (
+                                            <div key={i} style={{ borderLeft: "1.5px dashed var(--dashed)" }} />
+                                        ))}
+                                    </div>
+                                    <div className="absolute inset-0" style={{ pointerEvents: "none" }}>
+                                        {weekLayout.placed.flatMap((laned) =>
+                                            buildSegmentBlocks(laned, weekStartMs).map((block) => (
+                                                <button
+                                                    key={block.key}
+                                                    onClick={() => setSelectedTaskId(block.taskId)}
+                                                    title={block.label || block.status}
+                                                    style={{
+                                                        position: "absolute",
+                                                        pointerEvents: "auto",
+                                                        left: `calc(${(block.colStart / 7) * 100}% + ${block.openLeft ? 0 : 4}px)`,
+                                                        width: `calc(${(block.colSpan / 7) * 100}% - ${(block.openLeft ? 0 : 4) + (block.openRight ? 0 : 4)}px)`,
+                                                        top: `${14 + block.lane * 44}px`,
+                                                        height: "38px",
+                                                        background: colorForKey(block.status),
+                                                        border: "1.5px solid var(--card-border)",
+                                                        borderRight: block.terminal ? "4px solid var(--text-primary)" : "1.5px solid var(--card-border)",
+                                                        font: "700 12px/1 var(--font-mono), monospace",
+                                                        textAlign: "left",
+                                                        padding: "0 8px",
+                                                        display: "flex",
+                                                        alignItems: "center",
+                                                        whiteSpace: "nowrap",
+                                                        overflow: "hidden",
+                                                        textOverflow: "ellipsis",
+                                                        cursor: "pointer",
+                                                        color: "var(--text-primary)",
+                                                    }}
+                                                >
+                                                    {block.label}
+                                                </button>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </>

@@ -133,7 +133,7 @@ export default function CalendarPage() {
 
     const resolveColor = useCallback(
         (status: string): { label: string; color: string } => {
-            if (colorMode !== "bucket" || project === "") {
+            if (colorMode !== "bucket" || project === "" || bucketProject?.number !== project) {
                 return { label: status, color: colorForKey(status) };
             }
             const bucket = bucketLookup.get(status);
@@ -142,7 +142,7 @@ export default function CalendarPage() {
             }
             return { label: bucket.label, color: colorForKey(bucket.id) };
         },
-        [colorMode, project, bucketLookup]
+        [colorMode, project, bucketLookup, bucketProject]
     );
 
     const fetchData = useCallback(async () => {
@@ -156,9 +156,15 @@ export default function CalendarPage() {
             ]);
             const usersData = await usersRes.json();
             const summaryData = await summaryRes.json();
-            if (Array.isArray(usersData)) setKpis(usersData);
+            if (Array.isArray(usersData)) {
+                setKpis(usersData);
+            } else {
+                setKpis([]);
+            }
             if (summaryData.summary) {
                 setSummary({ repositories: summaryData.repositories || [], last_sync: summaryData.summary.last_sync });
+            } else {
+                setSummary(null);
             }
             if (!usersRes.ok || !summaryRes.ok) {
                 setError(usersData?.error || summaryData?.error || "Failed to load calendar data");
@@ -554,7 +560,7 @@ export default function CalendarPage() {
                                                                                         textAlign: "left",
                                                                                         padding: "2px 6px",
                                                                                         border: "1.5px solid var(--card-border)",
-                                                                                        background: resolveColor(t.status).color,
+                                                                                        background: resolveColor(statusOnDay(t, day.dateMs)).color,
                                                                                         color: "var(--text-primary)",
                                                                                         whiteSpace: "nowrap",
                                                                                         overflow: "hidden",
@@ -583,7 +589,7 @@ export default function CalendarPage() {
                                                                     <button
                                                                         key={block.key}
                                                                         onClick={() => setSelectedTaskId(block.taskId)}
-                                                                        title={block.label || block.status}
+                                                                        title={block.labelKind === "status" ? resolveColor(block.status).label : (block.label || resolveColor(block.status).label)}
                                                                         style={{
                                                                             position: "absolute",
                                                                             pointerEvents: "auto",
@@ -606,7 +612,7 @@ export default function CalendarPage() {
                                                                             color: "var(--text-primary)",
                                                                         }}
                                                                     >
-                                                                        {block.label}
+                                                                        {block.labelKind === "status" ? resolveColor(block.status).label : block.label}
                                                                     </button>
                                                                 ))
                                                             )}
@@ -651,7 +657,7 @@ export default function CalendarPage() {
                                 {view === "week" && (
                                     <div style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)" }}>
                                         <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "2px solid var(--card-border)" }}>
-                                            {Array.from({ length: 7 }, (_, i) => weekStartMs + i * DAY_MS).map((dateMs) => {
+                                            {Array.from({ length: 7 }, (_, i) => weekStartMs + i * DAY_MS).map((dateMs, i) => {
                                                 const d = new Date(dateMs);
                                                 const isToday = dateMs === todayMs;
                                                 return (
@@ -662,6 +668,11 @@ export default function CalendarPage() {
                                                         <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: "20px", fontWeight: 700, color: isToday ? "var(--text-primary)" : "var(--text-secondary)" }}>
                                                             {d.getUTCDate()}
                                                         </div>
+                                                        {weekLayout.hiddenPerDay[i] > 0 && (
+                                                            <div style={{ fontFamily: "var(--font-mono), monospace", fontSize: "10.5px", color: "var(--text-muted)" }}>
+                                                                +{weekLayout.hiddenPerDay[i]} more
+                                                            </div>
+                                                        )}
                                                     </div>
                                                 );
                                             })}
@@ -678,7 +689,7 @@ export default function CalendarPage() {
                                                         <button
                                                             key={block.key}
                                                             onClick={() => setSelectedTaskId(block.taskId)}
-                                                            title={block.label || block.status}
+                                                            title={block.labelKind === "status" ? resolveColor(block.status).label : (block.label || resolveColor(block.status).label)}
                                                             style={{
                                                                 position: "absolute",
                                                                 pointerEvents: "auto",
@@ -701,7 +712,7 @@ export default function CalendarPage() {
                                                                 color: "var(--text-primary)",
                                                             }}
                                                         >
-                                                            {block.label}
+                                                            {block.labelKind === "status" ? resolveColor(block.status).label : block.label}
                                                         </button>
                                                     ))
                                                 )}

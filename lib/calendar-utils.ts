@@ -202,7 +202,7 @@ export function packLanes(
 
     candidates.forEach(({ task, c0, c1 }) => {
         let lane = 0;
-        while (lanesEndCol[lane] !== undefined && lanesEndCol[lane] > c0) lane++;
+        while (lane < maxLanes && lanesEndCol[lane] !== undefined && lanesEndCol[lane] > c0) lane++;
         lanesEndCol[lane] = c1 + 1;
         if (lane < maxLanes) {
             placed.push({ task, c0, c1, lane });
@@ -218,6 +218,7 @@ export interface SegmentBlock {
     key: string;
     taskId: string;
     label: string;
+    labelKind: "title" | "status" | "none";
     status: string;
     colStart: number;
     colSpan: number;
@@ -248,11 +249,14 @@ export function buildSegmentBlocks(laned: LanedTask, weekStartMs: number): Segme
         const span = c1 - c0 + 1;
 
         let label = "";
+        let labelKind: SegmentBlock["labelKind"] = "none";
         if (!labelled) {
             label = task.title;
+            labelKind = "title";
             labelled = true;
         } else if (span >= 2) {
             label = seg.status;
+            labelKind = "status";
         }
 
         const terminal = !!task.closed_at && i === task.segments.length - 1 && endsHere;
@@ -261,6 +265,7 @@ export function buildSegmentBlocks(laned: LanedTask, weekStartMs: number): Segme
             key: `${task.id}-${weekStartMs}-${i}`,
             taskId: task.id,
             label,
+            labelKind,
             status: seg.status,
             colStart: c0,
             colSpan: span,

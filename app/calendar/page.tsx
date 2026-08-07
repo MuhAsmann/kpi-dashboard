@@ -123,6 +123,7 @@ export default function CalendarPage() {
     const [kpis, setKpis] = useState<UserKPI[]>([]);
     const [summary, setSummary] = useState<CalendarSummary | null>(null);
     const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [project, setProject] = useState<number | "">("");
 
     const [colorMode, setColorMode] = useState<"status" | "bucket">("status");
@@ -154,6 +155,7 @@ export default function CalendarPage() {
 
     const fetchData = useCallback(async () => {
         setLoading(true);
+        setError(null);
         try {
             const qs = project !== "" ? `?project=${project}` : "";
             const [usersRes, summaryRes] = await Promise.all([
@@ -166,8 +168,12 @@ export default function CalendarPage() {
             if (summaryData.summary) {
                 setSummary({ repositories: summaryData.repositories || [], last_sync: summaryData.summary.last_sync });
             }
+            if (!usersRes.ok || !summaryRes.ok) {
+                setError(usersData?.error || summaryData?.error || "Failed to load calendar data");
+            }
         } catch (err) {
             console.error("Failed to fetch calendar data:", err);
+            setError("Network error. Please check your connection.");
         } finally {
             setLoading(false);
         }
@@ -353,12 +359,20 @@ export default function CalendarPage() {
                     </button>
                 </header>
 
+                {error && (
+                    <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "12.5px", color: "var(--danger)" }}>
+                        ⚠ {error}
+                    </p>
+                )}
+
                 <div className="flex gap-5 items-start min-w-0">
                     <div className="flex-1 min-w-0 flex flex-col gap-5">
                         {loading ? (
-                            <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-muted)" }}>
-                                Loading…
-                            </p>
+                            <div className="flex flex-col gap-3">
+                                {[1, 2, 3, 4].map((i) => (
+                                    <div key={i} className="h-16 animate-pulse" style={{ background: "var(--card-alt)", border: "2px solid var(--card-border)" }} />
+                                ))}
+                            </div>
                         ) : (
                             <>
                                 <div

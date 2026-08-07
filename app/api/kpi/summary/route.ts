@@ -9,14 +9,16 @@ export async function GET(request: NextRequest) {
         const startDate = searchParams.get("start_date");
         const endDate = searchParams.get("end_date");
         const repository = searchParams.get("repository");
+        const project = searchParams.get("project");
 
         if (startDate) filters.startDate = new Date(startDate);
         if (endDate) filters.endDate = new Date(endDate);
         if (repository) filters.repository = repository;
+        if (project) filters.projectNumber = parseInt(project, 10);
 
         const [summary, repositories] = await Promise.all([
             getDashboardSummary(filters),
-            getRepositories(),
+            getRepositories(filters.projectNumber),
         ]);
 
         return NextResponse.json({ summary, repositories }, { status: 200 });

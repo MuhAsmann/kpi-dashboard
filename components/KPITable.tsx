@@ -1,7 +1,8 @@
 "use client";
 
 import { UserKPI } from "@/lib/kpi-service";
-import { ChevronUp, ChevronDown, ChevronsUpDown, ExternalLink, List, Calendar, Zap } from "lucide-react";
+import { KpiBucketInfo } from "@/lib/kpi-buckets";
+import { ChevronUp, ChevronDown, ChevronsUpDown, ExternalLink, List, Calendar, Zap, GitBranch } from "lucide-react";
 import Image from "next/image";
 import { SortField } from "@/types/dashboard";
 import { useState, Fragment } from "react";
@@ -15,6 +16,11 @@ interface KPITableProps {
     onSort: (field: SortField) => void;
 }
 
+function bucketBadgeClass(bucket: KpiBucketInfo | null): string {
+    if (!bucket) return "badge-unmapped";
+    return bucket.is_done ? "badge-done" : "badge-in-progress";
+}
+
 function SortIcon({
     field,
     sortBy,
@@ -26,47 +32,28 @@ function SortIcon({
 }) {
     if (field !== sortBy) return <ChevronsUpDown size={12} className="opacity-30" />;
     return sortOrder === "desc" ? (
-        <ChevronDown size={12} style={{ color: "#6366f1" }} />
+        <ChevronDown size={12} style={{ color: "var(--text-primary)" }} />
     ) : (
-        <ChevronUp size={12} style={{ color: "#6366f1" }} />
+        <ChevronUp size={12} style={{ color: "var(--text-primary)" }} />
     );
 }
 
 function CompletionBar({ rate }: { rate: number }) {
-    const color =
-        rate >= 80 ? "#10b981" : rate >= 50 ? "#f59e0b" : "#ef4444";
-
     return (
         <div className="flex items-center gap-2">
             <div className="progress-bar flex-1" style={{ minWidth: "80px" }}>
                 <div
                     className="progress-bar-fill"
-                    style={{ width: `${rate}%`, background: color }}
+                    style={{ width: `${rate}%`, background: "var(--accent)" }}
                 />
             </div>
-            <span className="text-xs font-medium w-10 text-right" style={{ color }}>
+            <span
+                className="w-10 text-right"
+                style={{ fontFamily: "var(--font-mono), monospace", fontSize: "12px", color: "var(--text-primary)" }}
+            >
                 {rate}%
             </span>
         </div>
-    );
-}
-
-function RankBadge({ rank }: { rank: number }) {
-    if (rank > 3) {
-        return (
-            <span className="text-xs font-bold" style={{ color: "var(--text-muted)" }}>
-                #{rank}
-            </span>
-        );
-    }
-    const classes = ["", "rank-1", "rank-2", "rank-3"];
-    const emoji = rank === 1 ? "🥇" : rank === 2 ? "🥈" : "🥉";
-    return (
-        <span
-            className={`${classes[rank]} text-white text-xs font-bold px-2 py-0.5 rounded-full`}
-        >
-            {emoji}
-        </span>
     );
 }
 
@@ -76,8 +63,8 @@ function SkeletonRow() {
             {[40, 160, 60, 60, 140, 80, 80, 100].map((width, i) => (
                 <td key={i} style={{ padding: "16px" }}>
                     <div
-                        className="h-4 rounded animate-pulse"
-                        style={{ background: "#1f2937", width: `${width}px` }}
+                        className="h-4 animate-pulse"
+                        style={{ background: "#E2E0D8", width: `${width}px` }}
                     />
                 </td>
             ))}
@@ -88,10 +75,10 @@ function SkeletonRow() {
 function EmptyState() {
     return (
         <tr>
-            <td colSpan={8} className="text-center py-16">
+            <td colSpan={9} className="text-center py-16">
                 <div style={{ color: "var(--text-muted)" }}>
-                    <div className="text-4xl mb-3">📊</div>
-                    <p className="font-medium mb-1" style={{ color: "var(--text-secondary)" }}>
+                    <div className="text-4xl mb-3">⌛</div>
+                    <p className="font-semibold mb-1" style={{ color: "var(--text-primary)" }}>
                         No KPI data yet
                     </p>
                     <p className="text-sm">
@@ -108,15 +95,15 @@ const columns: Array<{
     label: string;
     sortable?: boolean;
 }> = [
-        { key: null, label: "Rank" },
+        { key: null, label: "#" },
         { key: null, label: "Developer" },
         { key: "total_tasks", label: "Total", sortable: true },
-        { key: "completed_tasks", label: "Completed", sortable: true },
-        { key: "completion_rate", label: "Completion Rate", sortable: true },
-        { key: "avg_cycle_time_days", label: "Avg Cycle Time", sortable: true },
+        { key: "completed_tasks", label: "Done", sortable: true },
+        { key: "completion_rate", label: "Rate", sortable: true },
+        { key: "avg_cycle_time_days", label: "Cycle", sortable: true },
         { key: "bugs_count", label: "Bugs", sortable: true },
-        { key: null, label: "SP" },
-        { key: null, label: "Active" },
+        { key: null, label: "Points" },
+        { key: null, label: "Active work" },
     ];
 
 export default function KPITable({
@@ -134,42 +121,35 @@ export default function KPITable({
 
     return (
         <div
-            className="rounded-xl overflow-hidden"
             style={{
-                background: "rgba(17, 24, 39, 0.8)",
-                border: "1px solid rgba(31, 41, 55, 0.8)",
+                background: "var(--card)",
+                border: "2px solid var(--card-border)",
+                boxShadow: "5px 5px 0 var(--card-border)",
             }}
         >
             <div
-                className="px-6 py-4 border-b"
-                style={{ borderColor: "rgba(31,41,55,0.8)" }}
+                className="px-5 py-4"
+                style={{ borderBottom: "2px solid var(--card-border)", background: "var(--card-alt)" }}
             >
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h2
-                            className="text-base font-semibold"
-                            style={{ color: "var(--text-primary)" }}
-                        >
-                            Developer KPI
-                        </h2>
-                        <p className="text-xs mt-0.5" style={{ color: "var(--text-muted)" }}>
-                            {kpis.length} developer{kpis.length !== 1 ? "s" : ""} tracked
-                        </p>
-                    </div>
-                </div>
+                <h2 style={{ fontFamily: "var(--font-mono), monospace", fontSize: "20px", margin: 0, color: "var(--text-primary)" }}>
+                    Developer breakdown
+                </h2>
+                <p style={{ margin: "4px 0 0", fontSize: "12.5px", color: "var(--text-muted)" }}>
+                    {kpis.length} developer{kpis.length !== 1 ? "s" : ""} tracked · click a row to see tickets and status history
+                </p>
             </div>
 
             <div className="overflow-x-auto">
                 <table className="kpi-table">
                     <thead>
-                        <tr>
+                        <tr style={{ background: "var(--card-alt)" }}>
                             {columns.map((col) => (
                                 <th key={col.label}>
                                     {col.sortable && col.key ? (
                                         <button
                                             id={`sort-${col.key}-btn`}
                                             onClick={() => onSort(col.key as SortField)}
-                                            className="flex items-center gap-1 hover:opacity-80 transition-opacity"
+                                            className="flex items-center gap-1 hover:opacity-70 transition-opacity cursor-pointer"
                                         >
                                             {col.label}
                                             <SortIcon
@@ -193,24 +173,28 @@ export default function KPITable({
                         ) : (
                             kpis.map((kpi, index) => {
                                 const isExpanded = expandedUserId === kpi.user.id;
+                                const tint = ["var(--accent)", "var(--accent-blue)", "var(--accent-pink)", "var(--accent-green)", "var(--accent-lavender)"][index % 5];
                                 return (
                                     <Fragment key={kpi.user.id}>
                                         <tr
                                             id={`kpi-row-${kpi.user.github_login}`}
                                             onClick={() => toggleRow(kpi.user.id)}
                                             className="cursor-pointer"
+                                            style={{ background: isExpanded ? "#F7F5EE" : "var(--card)" }}
                                         >
                                             {/* Rank */}
-                                            <td style={{ width: "60px" }}>
-                                                <RankBadge rank={index + 1} />
+                                            <td style={{ width: "46px" }}>
+                                                <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-muted)" }}>
+                                                    {String(index + 1).padStart(2, "0")}
+                                                </span>
                                             </td>
 
                                             {/* Developer */}
                                             <td>
-                                                <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2.5">
                                                     <div
-                                                        className="relative w-8 h-8 rounded-full overflow-hidden shrink-0"
-                                                        style={{ background: "#1f2937" }}
+                                                        className="relative shrink-0 overflow-hidden"
+                                                        style={{ width: "34px", height: "34px", background: tint, border: "2px solid var(--card-border)" }}
                                                     >
                                                         {kpi.user.avatar_url ? (
                                                             <Image
@@ -221,28 +205,25 @@ export default function KPITable({
                                                             />
                                                         ) : (
                                                             <div
-                                                                className="w-full h-full flex items-center justify-center text-xs font-bold"
-                                                                style={{ color: "#6366f1" }}
+                                                                className="w-full h-full flex items-center justify-center"
+                                                                style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, fontSize: "12px", color: "var(--text-primary)" }}
                                                             >
                                                                 {kpi.user.github_login.slice(0, 2).toUpperCase()}
                                                             </div>
                                                         )}
                                                     </div>
-                                                    <div>
+                                                    <div className="min-w-0">
                                                         <a
                                                             href={`https://github.com/${kpi.user.github_login}`}
                                                             target="_blank"
                                                             rel="noopener noreferrer"
-                                                            className="flex items-center gap-1 font-medium text-sm hover:opacity-80 transition-opacity"
+                                                            className="flex items-center gap-1 font-semibold text-sm hover:opacity-70 transition-opacity"
                                                             style={{ color: "var(--text-primary)" }}
                                                         >
                                                             {kpi.user.name || kpi.user.github_login}
                                                             <ExternalLink size={10} className="opacity-50" />
                                                         </a>
-                                                        <p
-                                                            className="text-xs"
-                                                            style={{ color: "var(--text-muted)" }}
-                                                        >
+                                                        <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "11px", color: "var(--text-muted)" }}>
                                                             @{kpi.user.github_login}
                                                         </p>
                                                     </div>
@@ -251,50 +232,29 @@ export default function KPITable({
 
                                             {/* Total */}
                                             <td>
-                                                <span
-                                                    className="font-semibold"
-                                                    style={{ color: "var(--text-primary)" }}
-                                                >
+                                                <span style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, color: "var(--text-primary)" }}>
                                                     {kpi.metrics.total_tasks}
                                                 </span>
                                             </td>
 
                                             {/* Completed */}
                                             <td>
-                                                <span className="font-semibold" style={{ color: "#10b981" }}>
+                                                <span style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, color: "var(--text-primary)" }}>
                                                     {kpi.metrics.completed_tasks}
                                                 </span>
                                             </td>
 
                                             {/* Completion Rate */}
-                                            <td style={{ minWidth: "160px" }}>
+                                            <td style={{ minWidth: "150px" }}>
                                                 <CompletionBar rate={kpi.metrics.completion_rate} />
                                             </td>
 
                                             {/* Avg Cycle Time */}
                                             <td>
                                                 {kpi.metrics.avg_cycle_time_days !== null ? (
-                                                    <div className="flex items-baseline gap-1">
-                                                        <span
-                                                            className="font-semibold"
-                                                            style={{
-                                                                color:
-                                                                    kpi.metrics.avg_cycle_time_days <= 3
-                                                                        ? "#10b981"
-                                                                        : kpi.metrics.avg_cycle_time_days <= 7
-                                                                            ? "#f59e0b"
-                                                                            : "#ef4444",
-                                                            }}
-                                                        >
-                                                            {kpi.metrics.avg_cycle_time_days}
-                                                        </span>
-                                                        <span
-                                                            className="text-xs"
-                                                            style={{ color: "var(--text-muted)" }}
-                                                        >
-                                                            days
-                                                        </span>
-                                                    </div>
+                                                    <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-primary)" }}>
+                                                        {kpi.metrics.avg_cycle_time_days}d
+                                                    </span>
                                                 ) : (
                                                     <span style={{ color: "var(--text-muted)" }}>—</span>
                                                 )}
@@ -302,54 +262,61 @@ export default function KPITable({
 
                                             {/* Bugs */}
                                             <td className="text-center">
-                                                {kpi.metrics.bugs_count > 0 ? (
-                                                    <span className="font-semibold" style={{ color: "#ef4444" }}>
-                                                        {kpi.metrics.bugs_count}
-                                                    </span>
-                                                ) : (
-                                                    <span style={{ color: "var(--text-muted)" }}>0</span>
-                                                )}
+                                                <span
+                                                    style={{
+                                                        fontFamily: "var(--font-mono), monospace",
+                                                        fontSize: "12px",
+                                                        padding: "3px 8px",
+                                                        background: kpi.metrics.bugs_count > 0 ? "var(--accent-pink)" : "var(--card-alt)",
+                                                        border: "1.5px solid var(--card-border)",
+                                                        color: "var(--text-primary)",
+                                                    }}
+                                                >
+                                                    {kpi.metrics.bugs_count}
+                                                </span>
                                             </td>
 
                                             {/* Story Points */}
-                                            <td className="text-center">
+                                            <td style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px" }}>
                                                 {kpi.metrics.total_story_points > 0 ? (
-                                                    <div className="flex flex-col items-center gap-0.5">
-                                                        <span className="font-semibold flex items-center gap-1" style={{ color: "#a78bfa" }}>
-                                                            <Zap size={12} />
-                                                            {kpi.metrics.total_story_points}
-                                                        </span>
+                                                    <span className="flex items-center gap-1" style={{ color: "var(--text-primary)" }}>
+                                                        <Zap size={12} />
+                                                        {kpi.metrics.total_story_points}
                                                         {kpi.metrics.tasks_without_sp > 0 && (
-                                                            <span className="text-[10px]" style={{ color: "#f59e0b" }}>
-                                                                {kpi.metrics.tasks_without_sp} no SP
+                                                            <span style={{ color: "var(--warning)" }}>
+                                                                {" "}⚠{kpi.metrics.tasks_without_sp}
                                                             </span>
                                                         )}
-                                                    </div>
+                                                    </span>
                                                 ) : (
-                                                    <span className="text-[11px]" style={{ color: "#f59e0b" }}>No SP</span>
+                                                    <span style={{ color: "var(--warning)" }}>No SP</span>
                                                 )}
                                             </td>
 
-                                            {/* Active Tasks */}
+                                            {/* Active Tasks — by this project's own KPI buckets */}
                                             <td>
-                                                <div className="flex items-center gap-2 flex-wrap">
-                                                    {kpi.metrics.in_progress_tasks > 0 && (
-                                                        <span className="badge badge-in-progress">
-                                                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 pulse-dot" />
-                                                            {kpi.metrics.in_progress_tasks} WIP
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {kpi.metrics.bucket_breakdown.slice(0, 2).map((b) => (
+                                                        <span key={b.bucket_id} className="badge badge-in-progress">
+                                                            {b.count} {b.label}
+                                                        </span>
+                                                    ))}
+                                                    {kpi.metrics.bucket_breakdown.length > 2 && (
+                                                        <span className="badge badge-todo">
+                                                            +{kpi.metrics.bucket_breakdown.length - 2} more
                                                         </span>
                                                     )}
-                                                    {kpi.metrics.todo_tasks > 0 && (
-                                                        <span className="badge badge-todo">
-                                                            {kpi.metrics.todo_tasks} Todo
+                                                    {kpi.metrics.unmapped_tasks > 0 && (
+                                                        <span className="badge badge-unmapped" title="These statuses aren't mapped to a KPI bucket yet">
+                                                            {kpi.metrics.unmapped_tasks} unmapped
                                                         </span>
                                                     )}
                                                     {kpi.metrics.overdue_tasks > 0 && (
                                                         <span className="badge badge-cancelled">
-                                                            {kpi.metrics.overdue_tasks} Overdue
+                                                            {kpi.metrics.overdue_tasks} overdue
                                                         </span>
                                                     )}
-                                                    {kpi.metrics.active_tasks === 0 && kpi.metrics.overdue_tasks === 0 && (
+                                                    {kpi.metrics.active_tasks === 0 && (
                                                         <span className="badge badge-done">All done</span>
                                                     )}
                                                 </div>
@@ -357,105 +324,153 @@ export default function KPITable({
                                         </tr>
 
                                         {isExpanded && (
-                                            <tr className="bg-[rgba(17,24,39,0.3)]">
-                                                <td colSpan={8} className="p-0 border-b border-[rgba(31,41,55,0.5)]">
-                                                    <div className="p-6">
-                                                        <div className="flex items-center gap-2 mb-4">
-                                                            <List size={16} style={{ color: "var(--text-muted)" }} />
-                                                            <h3 className="font-semibold text-sm">Tickets for @{kpi.user.github_login}</h3>
+                                            <tr>
+                                                <td colSpan={9} className="p-0" style={{ background: "var(--card-alt)", borderBottom: "2px solid var(--card-border)" }}>
+                                                    <div className="p-5">
+                                                        <div className="flex items-baseline justify-between mb-3.5 flex-wrap gap-3">
+                                                            <div className="flex items-center gap-2">
+                                                                <List size={15} style={{ color: "var(--text-muted)" }} />
+                                                                <h3 style={{ fontFamily: "var(--font-mono), monospace", fontSize: "15px", margin: 0, color: "var(--text-primary)" }}>
+                                                                    @{kpi.user.github_login} · tickets in range
+                                                                </h3>
+                                                            </div>
+                                                            <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "11.5px", color: "var(--text-muted)" }}>
+                                                                {kpi.tasks.length} tasks
+                                                            </span>
                                                         </div>
 
                                                         {kpi.tasks.length === 0 ? (
-                                                            <p className="text-sm text-gray-500">No tasks found in the selected period.</p>
+                                                            <p className="text-sm" style={{ color: "var(--text-muted)" }}>No tasks found in the selected period.</p>
                                                         ) : (
                                                             <div className="grid gap-3 grid-cols-1 xl:grid-cols-2">
                                                                 {kpi.tasks.map(task => (
-                                                                    <div key={task.id} className="p-4 rounded-lg bg-[rgba(31,41,55,0.4)] border border-[rgba(55,65,81,0.5)] hover:bg-[rgba(55,65,81,0.3)] transition-colors">
-                                                                        <div className="flex justify-between items-start mb-2">
-                                                                            <a href={task.url || "#"} target="_blank" rel="noopener noreferrer" className="font-medium text-sm text-(--accent-light) hover:underline flex-1 pr-4 line-clamp-2">
+                                                                    <div
+                                                                        key={task.id}
+                                                                        style={{
+                                                                            background: "var(--card)",
+                                                                            border: "2px solid var(--card-border)",
+                                                                            boxShadow: "3px 3px 0 var(--card-border)",
+                                                                            padding: "12px 14px",
+                                                                            display: "flex",
+                                                                            flexDirection: "column",
+                                                                            gap: "9px",
+                                                                        }}
+                                                                    >
+                                                                        <div className="flex justify-between items-start gap-3.5 flex-wrap">
+                                                                            <a
+                                                                                href={task.url || "#"}
+                                                                                target="_blank"
+                                                                                rel="noopener noreferrer"
+                                                                                className="font-semibold text-sm hover:opacity-70 flex-1 pr-2 line-clamp-2"
+                                                                                style={{ color: "var(--text-primary)" }}
+                                                                            >
                                                                                 {task.title}
                                                                             </a>
-                                                                            <div className="flex gap-2 shrink-0 items-center flex-wrap justify-end">
+                                                                            <div className="flex gap-1.5 shrink-0 items-center flex-wrap justify-end">
                                                                                 {task.story_points != null ? (
-                                                                                    <span className="flex items-center gap-1" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(167, 139, 250, 0.15)", color: "#a78bfa", border: "1px solid rgba(167, 139, 250, 0.3)", borderRadius: "4px", fontWeight: 600 }}>
+                                                                                    <span
+                                                                                        className="flex items-center gap-1"
+                                                                                        style={{ padding: "2px 7px", fontSize: "10.5px", background: "var(--card-alt)", border: "1.5px solid var(--card-border)", color: "var(--text-primary)", fontWeight: 600 }}
+                                                                                    >
                                                                                         <Zap size={9} />{task.story_points} SP
                                                                                     </span>
                                                                                 ) : (
-                                                                                    <span className="flex items-center gap-1" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(245, 158, 11, 0.1)", color: "#f59e0b", border: "1px solid rgba(245, 158, 11, 0.3)", borderRadius: "4px", fontWeight: 500 }}>
+                                                                                    <span
+                                                                                        className="flex items-center gap-1"
+                                                                                        style={{ padding: "2px 7px", fontSize: "10.5px", background: "var(--accent)", border: "1.5px solid var(--card-border)", color: "var(--text-primary)" }}
+                                                                                    >
                                                                                         ⚠ No SP
                                                                                     </span>
                                                                                 )}
                                                                                 {task.is_overdue && (
-                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2" }}>
-                                                                                        ⚠️ Overdue
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 7px", fontSize: "10.5px" }}>
+                                                                                        overdue
                                                                                     </span>
                                                                                 )}
                                                                                 {task.bug_count > 0 && (
-                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 6px", fontSize: "10px", lineHeight: "1.2", backgroundColor: "rgba(239, 68, 68, 0.2)", color: "#fca5a5", border: "1px solid rgba(239, 68, 68, 0.3)" }}>
-                                                                                        🐞 {task.bug_count} Bug{task.bug_count > 1 ? 's' : ''}
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 7px", fontSize: "10.5px" }}>
+                                                                                        🐞 {task.bug_count} bug{task.bug_count > 1 ? 's' : ''}
                                                                                     </span>
                                                                                 )}
-                                                                                <span className={`badge shrink-0 ${task.status === 'DONE' ? 'badge-done' : task.status === 'IN_PROGRESS' ? 'badge-in-progress' : task.status === 'CANCELLED' ? 'badge-cancelled' : 'badge-todo'}`}>
-                                                                                    {task.status.replace("_", " ")}
+                                                                                <span className={`badge shrink-0 ${bucketBadgeClass(task.bucket)}`}>
+                                                                                    {task.status}
                                                                                 </span>
                                                                             </div>
                                                                         </div>
 
-                                                                        <div className="flex items-center justify-between mt-3 text-xs text-[var(--text-muted)]">
+                                                                        <div
+                                                                            className="flex items-center justify-between flex-wrap gap-2"
+                                                                            style={{ borderTop: "1.5px dashed var(--dashed)", paddingTop: "9px", fontFamily: "var(--font-mono), monospace", fontSize: "11px", color: "var(--text-muted)" }}
+                                                                        >
                                                                             <div className="flex items-center gap-3">
                                                                                 {task.repository && (
-                                                                                    <span className="flex items-center gap-1 bg-[#111827] px-2 py-1 rounded">
-                                                                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36-.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4" /><path d="M9 18c-4.51 2-5-2-7-2" /></svg>
+                                                                                    <span className="flex items-center gap-1" style={{ background: "var(--card-alt)", padding: "2px 6px", border: "1.5px solid var(--card-border)" }}>
+                                                                                        <GitBranch size={11} />
                                                                                         {task.repository.split('/')[1] || task.repository}
                                                                                     </span>
                                                                                 )}
                                                                                 <span className="flex items-center gap-1">
-                                                                                    <Calendar size={12} />
+                                                                                    <Calendar size={11} />
                                                                                     {format(new Date(task.created_at), "MMM d, yyyy")}
                                                                                 </span>
                                                                                 {task.closed_at && (
-                                                                                    <span className="flex items-center gap-1 text-emerald-500/70">
-                                                                                        → {format(new Date(task.closed_at), "MMM d")}
-                                                                                    </span>
+                                                                                    <span>→ {format(new Date(task.closed_at), "MMM d")}</span>
                                                                                 )}
                                                                             </div>
 
                                                                             {task.labels && task.labels.length > 0 && (
                                                                                 <div className="flex flex-wrap gap-1 justify-end">
                                                                                     {task.labels.slice(0, 3).map((l, idx) => (
-                                                                                        <span key={idx} className="w-2 h-2 rounded-full" style={{ backgroundColor: `#${l.color || '6b7280'}` }} title={l.name} />
+                                                                                        <span
+                                                                                            key={idx}
+                                                                                            style={{ width: "8px", height: "8px", border: "1px solid var(--card-border)", backgroundColor: `#${l.color || '6b7280'}` }}
+                                                                                            title={l.name}
+                                                                                        />
                                                                                     ))}
-                                                                                    {task.labels.length > 3 && <span className="text-[9px] opacity-70">+{task.labels.length - 3}</span>}
+                                                                                    {task.labels.length > 3 && <span style={{ fontSize: "9px" }}>+{task.labels.length - 3}</span>}
                                                                                 </div>
                                                                             )}
                                                                         </div>
 
-                                                                        {task.histories && task.histories.length > 0 && (
-                                                                            <div className="mt-3 pt-3 border-t border-[rgba(55,65,81,0.5)]">
-                                                                                <p className="text-xs font-semibold mb-2 text-[var(--text-muted)]">Status History</p>
-                                                                                <div className="space-y-1.5">
-                                                                                    {task.histories.map((h, i) => (
-                                                                                        <div key={i} className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
-                                                                                            <div className="flex items-center gap-2">
-                                                                                                {h.old_status ? (
-                                                                                                    <>
-                                                                                                        <span>{h.old_status.replace("_", " ")}</span>
-                                                                                                        <span className="opacity-50">→</span>
-                                                                                                        <span className="font-medium text-[var(--text-primary)]">{h.new_status.replace("_", " ")}</span>
-                                                                                                    </>
-                                                                                                ) : (
-                                                                                                    <>
-                                                                                                        <span className="opacity-50">Added to Project as</span>
-                                                                                                        <span className="font-medium text-[var(--text-primary)]">{h.new_status.replace("_", " ")}</span>
-                                                                                                    </>
-                                                                                                )}
-                                                                                            </div>
-                                                                                            <span className="opacity-70">{format(new Date(h.changed_at), "MMM d, h:mm a")}</span>
-                                                                                        </div>
+                                                                        {task.histories && task.histories.length > 0 && (() => {
+                                                                            const pastChips = task.histories.slice(0, -1);
+                                                                            const currentAt = task.histories[task.histories.length - 1].changed_at;
+                                                                            const chipStyle: React.CSSProperties = {
+                                                                                padding: "2px 7px",
+                                                                                background: "var(--background)",
+                                                                                border: "1.5px solid var(--card-border)",
+                                                                                display: "flex",
+                                                                                alignItems: "baseline",
+                                                                                gap: "6px",
+                                                                            };
+                                                                            return (
+                                                                                <div
+                                                                                    className="flex items-center gap-2 flex-wrap"
+                                                                                    style={{ borderTop: "1.5px dashed var(--dashed)", paddingTop: "9px", fontFamily: "var(--font-mono), monospace", fontSize: "11px" }}
+                                                                                >
+                                                                                    <span style={{ fontSize: "10.5px", letterSpacing: "0.5px", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                                                                                        History
+                                                                                    </span>
+                                                                                    {pastChips.map((h, i) => (
+                                                                                        <span key={i} className="flex items-center gap-2">
+                                                                                            <span style={chipStyle}>
+                                                                                                {h.new_status}
+                                                                                                <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>
+                                                                                                    {format(new Date(h.changed_at), "MMM d, h:mm a")}
+                                                                                                </span>
+                                                                                            </span>
+                                                                                            <span style={{ color: "var(--dashed)" }}>→</span>
+                                                                                        </span>
                                                                                     ))}
+                                                                                    <span style={{ ...chipStyle, background: task.is_done ? "var(--accent)" : "var(--card-alt)" }}>
+                                                                                        {task.status}
+                                                                                        <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>
+                                                                                            {format(new Date(currentAt), "MMM d, h:mm a")}
+                                                                                        </span>
+                                                                                    </span>
                                                                                 </div>
-                                                                            </div>
-                                                                        )}
+                                                                            );
+                                                                        })()}
                                                                     </div>
                                                                 ))}
                                                             </div>

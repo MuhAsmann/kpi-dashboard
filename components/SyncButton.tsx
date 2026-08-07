@@ -2,14 +2,16 @@
 
 import { useState } from "react";
 import { RefreshCw, CheckCircle, XCircle } from "lucide-react";
+import { PROJECTS } from "@/lib/projects";
 
 interface SyncButtonProps {
     onSyncComplete: () => void;
+    project: number | "";
 }
 
 type SyncState = "idle" | "syncing" | "success" | "error";
 
-export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
+export default function SyncButton({ onSyncComplete, project }: SyncButtonProps) {
     const [state, setSyncState] = useState<SyncState>("idle");
     const [message, setMessage] = useState("");
 
@@ -20,7 +22,11 @@ export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
         setMessage("");
 
         try {
-            const res = await fetch("/api/sync/github-project", { method: "POST" });
+            const res = await fetch("/api/sync/github-project", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(project !== "" ? { project } : {}),
+            });
             const data = await res.json();
 
             if (res.ok && data.success) {
@@ -31,7 +37,7 @@ export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
                 setSyncState("error");
                 setMessage(data.error || "Sync failed");
             }
-        } catch (err) {
+        } catch {
             setSyncState("error");
             setMessage("Network error. Please check your connection.");
         } finally {
@@ -42,24 +48,12 @@ export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
         }
     };
 
-    const buttonStyles = {
-        idle: {
-            background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
-            color: "white",
-        },
-        syncing: {
-            background: "rgba(99, 102, 241, 0.3)",
-            color: "#818cf8",
-        },
-        success: {
-            background: "rgba(16, 185, 129, 0.2)",
-            color: "#10b981",
-        },
-        error: {
-            background: "rgba(239, 68, 68, 0.2)",
-            color: "#ef4444",
-        },
-    };
+    const bg = {
+        idle: "var(--accent)",
+        syncing: "var(--accent)",
+        success: "var(--accent)",
+        error: "var(--accent-pink)",
+    }[state];
 
     const icons = {
         idle: <RefreshCw size={14} />,
@@ -68,11 +62,12 @@ export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
         error: <XCircle size={14} />,
     };
 
+    const scopeLabel = project !== "" ? PROJECTS.find((p) => p.number === project)?.label : undefined;
     const labels = {
-        idle: "Sync GitHub",
-        syncing: "Syncing...",
-        success: "Synced!",
-        error: "Failed",
+        idle: scopeLabel ? `Sync ${scopeLabel}` : "Sync GitHub",
+        syncing: "Syncing…",
+        success: "Synced",
+        error: "Retry sync",
     };
 
     return (
@@ -81,8 +76,13 @@ export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
                 id="sync-github-btn"
                 onClick={handleSync}
                 disabled={state === "syncing"}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-all hover:opacity-90 disabled:cursor-not-allowed"
-                style={buttonStyles[state]}
+                className="neo-btn flex items-center gap-2"
+                style={{
+                    fontSize: "13px",
+                    padding: "11px 18px",
+                    background: bg,
+                    color: "var(--text-primary)",
+                }}
             >
                 {icons[state]}
                 {labels[state]}
@@ -90,13 +90,17 @@ export default function SyncButton({ onSyncComplete }: SyncButtonProps) {
 
             {message && (
                 <div
-                    className="absolute right-0 top-full mt-2 p-3 rounded-lg text-xs z-50 min-w-64 max-w-80"
+                    className="absolute right-0 top-full mt-2 z-50"
                     style={{
-                        background: state === "error"
-                            ? "rgba(239,68,68,0.1)"
-                            : "rgba(16,185,129,0.1)",
-                        border: `1px solid ${state === "error" ? "rgba(239,68,68,0.3)" : "rgba(16,185,129,0.3)"}`,
-                        color: state === "error" ? "#ef4444" : "#10b981",
+                        minWidth: "16rem",
+                        maxWidth: "20rem",
+                        padding: "10px 12px",
+                        background: state === "error" ? "var(--accent-pink)" : "var(--card)",
+                        border: "2px solid var(--card-border)",
+                        boxShadow: "3px 3px 0 var(--card-border)",
+                        fontFamily: "var(--font-mono), monospace",
+                        fontSize: "12px",
+                        color: "var(--text-primary)",
                     }}
                 >
                     {message}

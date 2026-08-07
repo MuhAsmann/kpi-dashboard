@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckSquare, Users, TrendingUp, Clock, ListTodo, Target } from "lucide-react";
+import { CheckSquare, Users, TrendingUp, Percent, ListTodo, Target } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 
 interface SummaryData {
@@ -19,74 +19,79 @@ interface SummaryCardsProps {
 
 function SkeletonCard() {
     return (
-        <div className="stat-card animate-pulse">
-            <div className="h-4 w-24 rounded mb-3" style={{ background: "#1f2937" }} />
-            <div className="h-8 w-16 rounded" style={{ background: "#1f2937" }} />
-        </div>
+        <div
+            className="animate-pulse"
+            style={{
+                height: "116px",
+                background: "#E2E0D8",
+                border: "2px solid var(--card-border)",
+                boxShadow: "4px 4px 0 var(--card-border)",
+            }}
+        />
     );
 }
 
 export default function SummaryCards({ summary, loading }: SummaryCardsProps) {
-    const completionRate = summary
-        ? summary.total_tasks > 0
-            ? Math.round((summary.completed_tasks / summary.total_tasks) * 100)
-            : 0
-        : 0;
+    const total = summary?.total_tasks ?? 0;
+    const completed = summary?.completed_tasks ?? 0;
+    const active = summary?.active_tasks ?? 0;
+    const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
+    const activePct = total > 0 ? Math.round((active / total) * 100) : 0;
 
     const cards = [
         {
             id: "total-tasks-card",
             label: "Total Tasks",
-            value: summary?.total_tasks ?? 0,
+            value: total,
             icon: CheckSquare,
-            color: "#6366f1",
-            bg: "rgba(99,102,241,0.1)",
+            bg: "var(--accent-lavender)",
+            barPct: 100,
         },
         {
             id: "completed-tasks-card",
             label: "Completed",
-            value: summary?.completed_tasks ?? 0,
+            value: completed,
             icon: TrendingUp,
-            color: "#10b981",
-            bg: "rgba(16,185,129,0.1)",
+            bg: "var(--accent-blue)",
+            barPct: rate,
+            barLabel: `${rate}%`,
+        },
+        {
+            id: "completion-rate-card",
+            label: "Completion Rate",
+            value: `${rate}%`,
+            icon: Percent,
+            bg: "var(--accent)",
+            barPct: rate,
+        },
+        {
+            id: "active-tasks-card",
+            label: "Active Tasks",
+            value: active,
+            icon: ListTodo,
+            bg: "var(--accent-pink)",
+            barPct: activePct,
+            barLabel: `${activePct}%`,
         },
         {
             id: "active-users-card",
             label: "Active Devs",
             value: summary?.active_users ?? 0,
             icon: Users,
-            color: "#06b6d4",
-            bg: "rgba(6,182,212,0.1)",
-        },
-        {
-            id: "completion-rate-card",
-            label: "Completion Rate",
-            value: `${completionRate}%`,
-            icon: Clock,
-            color: "#f59e0b",
-            bg: "rgba(245,158,11,0.1)",
-        },
-        {
-            id: "active-tasks-card",
-            label: "Active Tasks",
-            value: summary?.active_tasks ?? 0,
-            icon: ListTodo,
-            color: "#8b5cf6",
-            bg: "rgba(139,92,246,0.1)",
+            bg: "var(--card)",
         },
         {
             id: "story-points-card",
             label: "Story Points",
             value: summary?.total_story_points ?? 0,
             icon: Target,
-            color: "#ec4899",
-            bg: "rgba(236,72,153,0.1)",
+            bg: "var(--accent-green)",
         },
     ];
 
     if (loading) {
         return (
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
                 {[1, 2, 3, 4, 5, 6].map((i) => (
                     <SkeletonCard key={i} />
                 ))}
@@ -96,35 +101,94 @@ export default function SummaryCards({ summary, loading }: SummaryCardsProps) {
 
     return (
         <div>
-            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
                 {cards.map((card) => {
                     const Icon = card.icon;
                     return (
-                        <div key={card.id} id={card.id} className="stat-card">
-                            <div className="flex items-center justify-between mb-3">
-                                <span className="text-sm" style={{ color: "var(--text-muted)" }}>
-                                    {card.label}
-                                </span>
-                                <div
-                                    className="w-8 h-8 rounded-lg flex items-center justify-center"
-                                    style={{ background: card.bg }}
+                        <div
+                            key={card.id}
+                            id={card.id}
+                            className="flex flex-col gap-1 min-w-0"
+                            style={{
+                                background: card.bg,
+                                border: "2px solid var(--card-border)",
+                                boxShadow: "4px 4px 0 var(--card-border)",
+                                padding: "14px 14px 12px",
+                            }}
+                        >
+                            <div className="flex items-start justify-between">
+                                <span
+                                    style={{
+                                        fontFamily: "var(--font-mono), monospace",
+                                        fontWeight: 700,
+                                        fontSize: "30px",
+                                        lineHeight: 1,
+                                        color: "var(--text-primary)",
+                                    }}
                                 >
-                                    <Icon size={15} style={{ color: card.color }} />
-                                </div>
+                                    {card.value}
+                                </span>
+                                <span
+                                    className="grid place-items-center shrink-0"
+                                    style={{
+                                        width: "30px",
+                                        height: "30px",
+                                        borderRadius: "50%",
+                                        background: "var(--card-border)",
+                                        color: "var(--card)",
+                                    }}
+                                >
+                                    <Icon size={14} />
+                                </span>
                             </div>
-                            <div
-                                className="text-3xl font-bold"
-                                style={{ color: card.color }}
+                            <span
+                                style={{
+                                    fontFamily: "var(--font-mono), monospace",
+                                    fontSize: "12px",
+                                    letterSpacing: "-0.2px",
+                                    color: "var(--text-primary)",
+                                }}
                             >
-                                {card.value}
-                            </div>
+                                {card.label}
+                            </span>
+                            {card.barPct !== undefined && (
+                                <div className="mt-2 flex items-center gap-2">
+                                    <div className="progress-bar flex-1">
+                                        <div
+                                            className="progress-bar-fill"
+                                            style={{
+                                                width: `${card.barPct}%`,
+                                                background: "var(--card-border)",
+                                            }}
+                                        />
+                                    </div>
+                                    {card.barLabel && (
+                                        <span
+                                            style={{
+                                                fontFamily: "var(--font-mono), monospace",
+                                                fontSize: "11px",
+                                                color: "var(--text-primary)",
+                                            }}
+                                        >
+                                            {card.barLabel}
+                                        </span>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     );
                 })}
             </div>
 
             {summary?.last_sync && (
-                <p className="text-right mt-2 text-xs" style={{ color: "var(--text-muted)" }}>
+                <p
+                    className="text-right mt-2"
+                    style={{
+                        fontFamily: "var(--font-mono), monospace",
+                        fontSize: "12px",
+                        color: "var(--text-muted)",
+                    }}
+                >
                     Last synced{" "}
                     {formatDistanceToNow(new Date(summary.last_sync), { addSuffix: true })}
                 </p>

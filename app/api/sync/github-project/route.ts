@@ -4,7 +4,9 @@ import { getRecentSyncLogs } from "@/lib/repository";
 
 export async function POST(request: NextRequest) {
     try {
-        const result = await syncGitHubProject();
+        const body = await request.json().catch(() => ({}));
+        const projectNumber = typeof body?.project === "number" ? body.project : undefined;
+        const result = await syncGitHubProject(projectNumber);
         return NextResponse.json(
             {
                 success: true,

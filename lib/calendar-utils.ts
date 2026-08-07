@@ -139,3 +139,195 @@ export function uniqueOptions(values: (string | null | undefined)[], allLabel: s
     const distinct = Array.from(new Set(values.filter((v): v is string => !!v))).sort();
     return [allLabel, ...distinct];
 }
+
+// ============================================================================
+// Calendar Layout and Navigation
+// ============================================================================
+
+export type CalendarView = "month" | "week" | "day";
+
+/** First visible grid cell for the month containing `anchorMs` — the Sunday on/before the 1st. */
+export function getMonthGridStart(anchorMs: number): number {
+    const d = new Date(anchorMs);
+    const firstOfMonth = Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1);
+    return firstOfMonth - new Date(firstOfMonth).getUTCDay() * DAY_MS;
+}
+
+/** Sunday on/before `anchorMs`. */
+export function getWeekStart(anchorMs: number): number {
+    return anchorMs - new Date(anchorMs).getUTCDay() * DAY_MS;
+}
+
+export function navigateAnchor(anchorMs: number, view: CalendarView, direction: 1 | -1): number {
+    if (view === "day") return anchorMs + direction * DAY_MS;
+    if (view === "week") return anchorMs + direction * 7 * DAY_MS;
+    const d = new Date(anchorMs);
+    return Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + direction, 1);
+}
+
+// ============================================================================
+// Lane Packing and Segment Blocks
+// ============================================================================
+
+export interface LanedTask {
+    task: ComputedTask;
+    c0: number;
+    c1: number;
+    lane: number;
+}
+
+/**
+ * Packs tasks overlapping [weekStartMs, weekStartMs + 6*DAY_MS] into lanes so none overlap
+ * visually, up to `maxLanes`. Tasks that don't fit count toward `hiddenPerDay` ("+N more").
+ * Ported from the design mockup's `layout()` function.
+ */
+export function packLanes(
+    weekStartMs: number,
+    tasks: ComputedTask[],
+    maxLanes: number
+): { placed: LanedTask[]; hiddenPerDay: number[] } {
+    const weekEndMs = weekStartMs + 6 * DAY_MS;
+    const lanesEndCol: number[] = [];
+    const placed: LanedTask[] = [];
+    const hiddenPerDay = [0, 0, 0, 0, 0, 0, 0];
+
+    const candidates = tasks
+        .filter((t) => t.spanEnd >= weekStartMs && t.spanStart <= weekEndMs)
+        .map((t) => ({
+            task: t,
+            c0: Math.max(0, Math.round((t.spanStart - weekStartMs) / DAY_MS)),
+            c1: Math.min(6, Math.round((t.spanEnd - weekStartMs) / DAY_MS)),
+        }))
+        .sort((a, b) => a.c0 - b.c0 || (b.c1 - b.c0) - (a.c1 - a.c0) || a.task.id.localeCompare(b.task.id));
+
+    candidates.forEach(({ task, c0, c1 }) => {
+        let lane = 0;
+        while (lanesEndCol[lane] !== undefined && lanesEndCol[lane] > c0) lane++;
+        lanesEndCol[lane] = c1 + 1;
+        if (lane < maxLanes) {
+            placed.push({ task, c0, c1, lane });
+        } else {
+            for (let c = c0; c <= c1; c++) hiddenPerDay[c]++;
+        }
+    });
+
+    return { placed, hiddenPerDay };
+}
+
+export interface SegmentBlock {
+    key: string;
+    taskId: string;
+    label: string;
+    status: string;
+    colStart: number;
+    colSpan: number;
+    lane: number;
+    openLeft: boolean;
+    openRight: boolean;
+    terminal: boolean;
+}
+
+/**
+ * Splits one laned task's bar, within one week, into per-status colored blocks.
+ * Ported from the design mockup's `bar()` function.
+ */
+export function buildSegmentBlocks(laned: LanedTask, weekStartMs: number): SegmentBlock[] {
+    const { task, lane } = laned;
+    const weekEndMs = weekStartMs + 6 * DAY_MS;
+    const blocks: SegmentBlock[] = [];
+    let labelled = false;
+
+    task.segments.forEach((seg, i) => {
+        if (seg.end < weekStartMs || seg.start > weekEndMs) return;
+        const c0 = Math.max(0, Math.round((seg.start - weekStartMs) / DAY_MS));
+        const c1 = Math.min(6, Math.round((seg.end - weekStartMs) / DAY_MS));
+        const startsHere = seg.start >= weekStartMs;
+        const endsHere = seg.end <= weekEndMs;
+        const openLeft = !startsHere || i > 0;
+        const openRight = !endsHere || i < task.segments.length - 1;
+        const span = c1 - c0 + 1;
+
+        let label = "";
+        if (!labelled) {
+            label = task.title;
+            labelled = true;
+        } else if (span >= 2) {
+            label = seg.status;
+        }
+
+        const terminal = !!task.closed_at && i === task.segments.length - 1 && endsHere;
+
+        blocks.push({
+            key: `${task.id}-${weekStartMs}-${i}`,
+            taskId: task.id,
+            label,
+            status: seg.status,
+            colStart: c0,
+            colSpan: span,
+            lane,
+            openLeft,
+            openRight,
+            terminal,
+        });
+    });
+
+    return blocks;
+}
+
+// ============================================================================
+// Month/Week/Day View Data
+// ============================================================================
+
+export interface MonthDay {
+    dateMs: number;
+    dayNumber: number;
+    isCurrentMonth: boolean;
+    isToday: boolean;
+    monthLabel: string;
+}
+
+export interface MonthWeek {
+    weekStartMs: number;
+    days: MonthDay[];
+    placed: LanedTask[];
+    hiddenPerDay: number[];
+}
+
+export function computeMonthWeeks(
+    anchorMs: number,
+    tasks: ComputedTask[],
+    todayMs: number,
+    maxLanes = 3
+): MonthWeek[] {
+    const gridStart = getMonthGridStart(anchorMs);
+    const anchorDate = new Date(anchorMs);
+    const weeks: MonthWeek[] = [];
+
+    for (let w = 0; w < 6; w++) {
+        const weekStartMs = gridStart + w * 7 * DAY_MS;
+        const { placed, hiddenPerDay } = packLanes(weekStartMs, tasks, maxLanes);
+        const days: MonthDay[] = [];
+        for (let i = 0; i < 7; i++) {
+            const dateMs = weekStartMs + i * DAY_MS;
+            const d = new Date(dateMs);
+            days.push({
+                dateMs,
+                dayNumber: d.getUTCDate(),
+                isCurrentMonth: d.getUTCMonth() === anchorDate.getUTCMonth(),
+                isToday: dateMs === todayMs,
+                monthLabel: d.getUTCDate() === 1 ? MONTH_NAMES[d.getUTCMonth()].slice(0, 3) : "",
+            });
+        }
+        weeks.push({ weekStartMs, days, placed, hiddenPerDay });
+    }
+    return weeks;
+}
+
+export function getDayItems(anchorMs: number, tasks: ComputedTask[]): ComputedTask[] {
+    return tasks.filter((t) => t.spanStart <= anchorMs && t.spanEnd >= anchorMs);
+}
+
+export function statusOnDay(task: ComputedTask, dayMs: number): string {
+    const seg = task.segments.find((s) => s.start <= dayMs && s.end >= dayMs);
+    return seg ? seg.status : task.status;
+}

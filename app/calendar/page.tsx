@@ -6,7 +6,7 @@ import Link from "next/link";
 import { formatDistanceToNow } from "date-fns";
 import { UserKPI } from "@/lib/kpi-service";
 import { PROJECTS } from "@/lib/projects";
-import { CalendarTask, ComputedTask, computeTask } from "@/lib/calendar-utils";
+import { CalendarTask, ComputedTask, computeTask, uniqueOptions } from "@/lib/calendar-utils";
 import {
     LayoutDashboard,
     ListChecks,
@@ -16,6 +16,7 @@ import {
     Settings,
     HelpCircle,
     Calendar as CalendarIcon,
+    X,
 } from "lucide-react";
 
 interface CalendarSummary {
@@ -145,6 +146,33 @@ export default function CalendarPage() {
         [tasks, todayMs]
     );
 
+    const [filters, setFilters] = useState({ repository: "", assignee: "", label: "", status: "" });
+
+    const repoOptions = useMemo(() => uniqueOptions(computedTasks.map((t) => t.repository), "All repositories"), [computedTasks]);
+    const assigneeOptions = useMemo(
+        () => uniqueOptions(computedTasks.map((t) => t.assignee.name ?? t.assignee.github_login), "All assignees"),
+        [computedTasks]
+    );
+    const labelOptions = useMemo(
+        () => uniqueOptions(computedTasks.flatMap((t) => t.labels.map((l) => l.name)), "All labels"),
+        [computedTasks]
+    );
+    const statusOptions = useMemo(() => uniqueOptions(computedTasks.map((t) => t.status), "All statuses"), [computedTasks]);
+
+    const filteredTasks = useMemo(
+        () =>
+            computedTasks.filter(
+                (t) =>
+                    (!filters.repository || t.repository === filters.repository) &&
+                    (!filters.assignee || (t.assignee.name ?? t.assignee.github_login) === filters.assignee) &&
+                    (!filters.label || t.labels.some((l) => l.name === filters.label)) &&
+                    (!filters.status || t.status === filters.status)
+            ),
+        [computedTasks, filters]
+    );
+
+    const hasActiveFilters = !!(filters.repository || filters.assignee || filters.label || filters.status);
+
     return (
         <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
             <Sidebar />
@@ -225,9 +253,74 @@ export default function CalendarPage() {
                         Loading…
                     </p>
                 ) : (
-                    <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-muted)" }}>
-                        {computedTasks.length} task{computedTasks.length !== 1 ? "s" : ""} loaded
-                    </p>
+                    <>
+                        <div
+                            className="flex items-end gap-3.5 flex-wrap"
+                            style={{
+                                background: "var(--card)",
+                                border: "2px solid var(--card-border)",
+                                boxShadow: "5px 5px 0 var(--card-border)",
+                                padding: "14px 16px",
+                            }}
+                        >
+                            {[
+                                { key: "repository" as const, label: "Repository", options: repoOptions },
+                                { key: "assignee" as const, label: "Assignee", options: assigneeOptions },
+                                { key: "label" as const, label: "Label", options: labelOptions },
+                                { key: "status" as const, label: "Status", options: statusOptions },
+                            ].map(({ key, label, options }) => (
+                                <div key={key} className="flex flex-col gap-1.5">
+                                    <label
+                                        htmlFor={`calendar-filter-${key}`}
+                                        style={{
+                                            fontFamily: "var(--font-mono), monospace",
+                                            fontSize: "10.5px",
+                                            letterSpacing: "1px",
+                                            textTransform: "uppercase",
+                                            color: "var(--text-muted)",
+                                        }}
+                                    >
+                                        {label}
+                                    </label>
+                                    <select
+                                        id={`calendar-filter-${key}`}
+                                        value={filters[key]}
+                                        onChange={(e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }))}
+                                        style={{
+                                            fontFamily: "var(--font-mono), monospace",
+                                            fontSize: "13px",
+                                            padding: "8px 10px",
+                                            border: "2px solid var(--card-border)",
+                                            background: "var(--background)",
+                                            color: "var(--text-primary)",
+                                            cursor: "pointer",
+                                            minWidth: "150px",
+                                        }}
+                                    >
+                                        {options.map((o) => (
+                                            <option key={o} value={o.startsWith("All ") ? "" : o}>
+                                                {o}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            ))}
+                            {hasActiveFilters && (
+                                <button
+                                    onClick={() => setFilters({ repository: "", assignee: "", label: "", status: "" })}
+                                    className="neo-btn neo-btn-sm flex items-center gap-1.5"
+                                    style={{ fontSize: "12px", padding: "9px 13px", background: "var(--accent-pink)", color: "var(--text-primary)" }}
+                                >
+                                    <X size={12} />
+                                    Clear filters
+                                </button>
+                            )}
+                        </div>
+
+                        <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-muted)" }}>
+                            {filteredTasks.length} task{filteredTasks.length !== 1 ? "s" : ""} in view · {computedTasks.length} total
+                        </p>
+                    </>
                 )}
             </main>
         </div>

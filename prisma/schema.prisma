@@ -19,25 +19,26 @@ model User {
 }
 
 model Task {
-  id                  String      @id @default(cuid())
-  github_issue_id     String      @unique
+  id                  String        @id @default(cuid())
+  github_issue_id     String        @unique
   github_issue_number Int?
   title               String
   body                String?
   url                 String?
   created_at          DateTime
   closed_at           DateTime?
-  updated_at          DateTime    @updatedAt
-  status              TaskStatus  @default(TODO)
+  updated_at          DateTime      @updatedAt
+  status              TaskStatus    @default(TODO)
   repository          String?
   project_title       String?
   assignee_id         String?
   end_date            DateTime?
   start_date          DateTime?
-  type                String?     @default("Issue")
+  type                String?       @default("Issue")
   story_points        Float?
+  histories           TaskHistory[]
   labels              TaskLabel[]
-  assignee            User?       @relation(fields: [assignee_id], references: [id])
+  assignee            User?         @relation(fields: [assignee_id], references: [id])
 
   @@map("tasks")
 }
@@ -51,6 +52,17 @@ model TaskLabel {
 
   @@unique([task_id, name])
   @@map("task_labels")
+}
+
+model TaskHistory {
+  id         String      @id @default(cuid())
+  task_id    String
+  old_status TaskStatus?
+  new_status TaskStatus
+  changed_at DateTime    @default(now())
+  task       Task        @relation(fields: [task_id], references: [id], onDelete: Cascade)
+
+  @@map("task_histories")
 }
 
 model SyncLog {

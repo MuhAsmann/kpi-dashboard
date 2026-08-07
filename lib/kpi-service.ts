@@ -1,11 +1,12 @@
 // @ts-nocheck
 
 import { prisma } from "@/lib/prisma";
-import { Task, User, TaskLabel } from "@prisma/client";
+import { Task, User, TaskLabel, TaskHistory } from "@prisma/client";
 import { differenceInDays } from "date-fns";
 
 type TaskWithRelations = Task & {
     labels: TaskLabel[];
+    histories: TaskHistory[];
 };
 
 type UserWithTasks = User & {
@@ -48,6 +49,11 @@ export interface UserKPI {
         bug_count: number;
         story_points: number | null;
         labels: { name: string; color: string | null }[];
+        histories: {
+            old_status: string | null;
+            new_status: string;
+            changed_at: Date;
+        }[];
     }[];
 }
 
@@ -67,7 +73,10 @@ export async function calculateAllUserKPIs(
         include: {
             tasks: {
                 where: buildTaskFilter(filters),
-                include: { labels: true },
+                include: { 
+                    labels: true,
+                    histories: { orderBy: { changed_at: "asc" } },
+                },
             },
         },
         orderBy: { github_login: "asc" },
@@ -193,6 +202,11 @@ export async function calculateAllUserKPIs(
                         bug_count: issueBugCount,
                         story_points: t.story_points ?? null,
                         labels: t.labels.map((l) => ({ name: l.name, color: l.color })),
+                        histories: t.histories.map((h) => ({
+                            old_status: h.old_status,
+                            new_status: h.new_status,
+                            changed_at: h.changed_at,
+                        })),
                     };
                 }).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
             };

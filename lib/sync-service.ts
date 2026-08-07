@@ -10,6 +10,7 @@ import {
     updateSyncLog,
     upsertTask,
     upsertTaskLabels,
+    syncTaskHistories,
     upsertUser,
 } from "@/lib/repository";
 
@@ -140,6 +141,25 @@ export async function syncGitHubProject(): Promise<{
                 task.id,
                 labels.map((l) => ({ name: l.name, color: l.color }))
             );
+
+            // Sync histories from timeline items
+            const timelineNodes = content.timelineItems?.nodes || [];
+            const parsedHistories = timelineNodes
+                .filter((n) => n.__typename === "ProjectV2ItemStatusChangedEvent")
+                .map((n) => {
+                    const newStatus = mapStatusToEnum(n.status || "");
+                    const oldStatus = n.previousStatus ? mapStatusToEnum(n.previousStatus) : null;
+                    return {
+                        old_status: oldStatus,
+                        new_status: newStatus,
+                        changed_at: n.createdAt ? new Date(n.createdAt) : new Date(),
+                    };
+                });
+            
+            // Note: timelineItems might be missing initial creation if the item was added to the project later.
+            // If there's no history but there's a current status, or if we want to ensure we have the history...
+            // It's usually fine to just sync what's in the timeline.
+            await syncTaskHistories(task.id, parsedHistories);
 
             // Handle multiple assignees - assign remaining to same task (we store primary only)
             // If you want to support multiple assignees per task, you'd need a join table

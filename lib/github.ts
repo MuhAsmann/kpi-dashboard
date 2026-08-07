@@ -27,6 +27,14 @@ export interface GitHubProjectItem {
     repository?: {
       nameWithOwner: string;
     };
+    timelineItems?: {
+      nodes: Array<{
+        __typename: string;
+        createdAt?: string;
+        previousStatus?: string;
+        status?: string;
+      }>;
+    };
   } | null;
   fieldValues: {
     nodes: Array<{
@@ -113,6 +121,16 @@ export async function fetchGitHubProjectItems(
                   repository {
                     nameWithOwner
                   }
+                  timelineItems(first: 20, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+                    nodes {
+                      __typename
+                      ... on ProjectV2ItemStatusChangedEvent {
+                        createdAt
+                        previousStatus
+                        status
+                      }
+                    }
+                  }
                 }
                 ... on PullRequest {
                   id
@@ -138,6 +156,16 @@ export async function fetchGitHubProjectItems(
                   }
                   repository {
                     nameWithOwner
+                  }
+                  timelineItems(first: 20, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+                    nodes {
+                      __typename
+                      ... on ProjectV2ItemStatusChangedEvent {
+                        createdAt
+                        previousStatus
+                        status
+                      }
+                    }
                   }
                 }
               }

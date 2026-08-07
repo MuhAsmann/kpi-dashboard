@@ -429,6 +429,33 @@ export default function KPITable({
                                                                                 </div>
                                                                             )}
                                                                         </div>
+
+                                                                        {task.histories && task.histories.length > 0 && (
+                                                                            <div className="mt-3 pt-3 border-t border-[rgba(55,65,81,0.5)]">
+                                                                                <p className="text-xs font-semibold mb-2 text-[var(--text-muted)]">Status History</p>
+                                                                                <div className="space-y-1.5">
+                                                                                    {task.histories.map((h, i) => (
+                                                                                        <div key={i} className="flex items-center justify-between text-[11px] text-[var(--text-secondary)]">
+                                                                                            <div className="flex items-center gap-2">
+                                                                                                {h.old_status ? (
+                                                                                                    <>
+                                                                                                        <span>{h.old_status.replace("_", " ")}</span>
+                                                                                                        <span className="opacity-50">→</span>
+                                                                                                        <span className="font-medium text-[var(--text-primary)]">{h.new_status.replace("_", " ")}</span>
+                                                                                                    </>
+                                                                                                ) : (
+                                                                                                    <>
+                                                                                                        <span className="opacity-50">Added to Project as</span>
+                                                                                                        <span className="font-medium text-[var(--text-primary)]">{h.new_status.replace("_", " ")}</span>
+                                                                                                    </>
+                                                                                                )}
+                                                                                            </div>
+                                                                                            <span className="opacity-70">{format(new Date(h.changed_at), "MMM d, h:mm a")}</span>
+                                                                                        </div>
+                                                                                    ))}
+                                                                                </div>
+                                                                            </div>
+                                                                        )}
                                                                     </div>
                                                                 ))}
                                                             </div>

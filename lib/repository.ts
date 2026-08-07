@@ -103,6 +103,31 @@ export async function upsertTaskLabels(
     }
 }
 
+export async function syncTaskHistories(
+    taskId: string,
+    histories: Array<{
+        old_status: TaskStatus | null;
+        new_status: TaskStatus;
+        changed_at: Date;
+    }>
+): Promise<void> {
+    // Since we fetch the full timeline from GitHub, we can just replace the existing histories for this task
+    await prisma.taskHistory.deleteMany({
+        where: { task_id: taskId },
+    });
+
+    if (histories.length > 0) {
+        await prisma.taskHistory.createMany({
+            data: histories.map((h) => ({
+                task_id: taskId,
+                old_status: h.old_status,
+                new_status: h.new_status,
+                changed_at: h.changed_at,
+            })),
+        });
+    }
+}
+
 export async function getAllTasksWithRelations() {
     return prisma.task.findMany({
         include: {

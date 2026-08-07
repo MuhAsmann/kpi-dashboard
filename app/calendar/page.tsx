@@ -23,6 +23,8 @@ import {
     MONTH_NAMES,
     DOW_NAMES,
     DAY_MS,
+    StatusMappingProject,
+    buildBucketLookup,
 } from "@/lib/calendar-utils";
 import {
     LayoutDashboard,
@@ -122,6 +124,33 @@ export default function CalendarPage() {
     const [summary, setSummary] = useState<CalendarSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [project, setProject] = useState<number | "">("");
+
+    const [colorMode, setColorMode] = useState<"status" | "bucket">("status");
+    const [bucketProject, setBucketProject] = useState<StatusMappingProject | undefined>(undefined);
+
+    useEffect(() => {
+        if (colorMode !== "bucket" || project === "") return;
+        fetch(`/api/status-mapping?project=${project}`)
+            .then((r) => r.json())
+            .then((data) => setBucketProject((data.projects ?? [])[0]))
+            .catch(() => setBucketProject(undefined));
+    }, [colorMode, project]);
+
+    const bucketLookup = useMemo(() => buildBucketLookup(bucketProject), [bucketProject]);
+
+    const resolveColor = useCallback(
+        (status: string): { label: string; color: string } => {
+            if (colorMode !== "bucket" || project === "") {
+                return { label: status, color: colorForKey(status) };
+            }
+            const bucket = bucketLookup.get(status);
+            if (bucket === undefined || bucket === null) {
+                return { label: "Unmapped", color: "var(--card-alt)" };
+            }
+            return { label: bucket.label, color: colorForKey(bucket.id) };
+        },
+        [colorMode, project, bucketLookup]
+    );
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -286,7 +315,11 @@ export default function CalendarPage() {
                             <select
                                 id="calendar-project"
                                 value={project}
-                                onChange={(e) => setProject(e.target.value ? parseInt(e.target.value, 10) : "")}
+                                onChange={(e) => {
+                                    const next = e.target.value ? parseInt(e.target.value, 10) : "";
+                                    setProject(next);
+                                    if (next === "") setColorMode("status");
+                                }}
                                 title="Scopes calendar data to this project"
                                 style={{
                                     fontFamily: "var(--font-mono), monospace",
@@ -420,6 +453,18 @@ export default function CalendarPage() {
                                                 Per-day
                                             </button>
                                         </div>
+                                        <div className="flex gap-1" title={project === "" ? "Select a project to color by bucket" : undefined}>
+                                            <button onClick={() => setColorMode("status")} style={segStyle(colorMode === "status")}>
+                                                By status
+                                            </button>
+                                            <button
+                                                onClick={() => project !== "" && setColorMode("bucket")}
+                                                disabled={project === ""}
+                                                style={{ ...segStyle(colorMode === "bucket"), opacity: project === "" ? 0.5 : 1, cursor: project === "" ? "not-allowed" : "pointer" }}
+                                            >
+                                                By bucket
+                                            </button>
+                                        </div>
                                         <div className="flex gap-1">
                                             <button onClick={() => setView("month")} style={segStyle(view === "month")}>
                                                 Month
@@ -503,7 +548,7 @@ export default function CalendarPage() {
                                                                                         textAlign: "left",
                                                                                         padding: "2px 6px",
                                                                                         border: "1.5px solid var(--card-border)",
-                                                                                        background: colorForKey(t.status),
+                                                                                        background: resolveColor(t.status).color,
                                                                                         color: "var(--text-primary)",
                                                                                         whiteSpace: "nowrap",
                                                                                         overflow: "hidden",
@@ -540,7 +585,7 @@ export default function CalendarPage() {
                                                                             width: `calc(${(block.colSpan / 7) * 100}% - ${(block.openLeft ? 0 : 4) + (block.openRight ? 0 : 4)}px)`,
                                                                             top: `${34 + block.lane * 26}px`,
                                                                             height: "22px",
-                                                                            background: colorForKey(block.status),
+                                                                            background: resolveColor(block.status).color,
                                                                             border: "1.5px solid var(--card-border)",
                                                                             borderRight: block.terminal ? "4px solid var(--text-primary)" : "1.5px solid var(--card-border)",
                                                                             font: "700 11px/1 var(--font-mono), monospace",
@@ -635,7 +680,7 @@ export default function CalendarPage() {
                                                                 width: `calc(${(block.colSpan / 7) * 100}% - ${(block.openLeft ? 0 : 4) + (block.openRight ? 0 : 4)}px)`,
                                                                 top: `${14 + block.lane * 44}px`,
                                                                 height: "38px",
-                                                                background: colorForKey(block.status),
+                                                                background: resolveColor(block.status).color,
                                                                 border: "1.5px solid var(--card-border)",
                                                                 borderRight: block.terminal ? "4px solid var(--text-primary)" : "1.5px solid var(--card-border)",
                                                                 font: "700 12px/1 var(--font-mono), monospace",
@@ -677,7 +722,7 @@ export default function CalendarPage() {
                                                         className="flex items-center gap-3.5 w-full text-left"
                                                         style={{ padding: "14px 16px", borderBottom: "1.5px dashed var(--dashed)", background: "transparent", cursor: "pointer" }}
                                                     >
-                                                        <span style={{ width: "4px", alignSelf: "stretch", minHeight: "34px", background: colorForKey(status), border: "1.5px solid var(--card-border)", flexShrink: 0 }} />
+                                                        <span style={{ width: "4px", alignSelf: "stretch", minHeight: "34px", background: resolveColor(status).color, border: "1.5px solid var(--card-border)", flexShrink: 0 }} />
                                                         <span className="flex flex-col gap-1 min-w-0">
                                                             <span style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>
                                                                 {t.title}
@@ -686,8 +731,8 @@ export default function CalendarPage() {
                                                                 {t.repository} · {t.assignee.name ?? t.assignee.github_login}
                                                             </span>
                                                         </span>
-                                                        <span className="ml-auto badge" style={{ background: colorForKey(status) }}>
-                                                            {status}
+                                                        <span className="ml-auto badge" style={{ background: resolveColor(status).color }}>
+                                                            {resolveColor(status).label}
                                                         </span>
                                                     </button>
                                                 );
@@ -722,8 +767,8 @@ export default function CalendarPage() {
                                 <h3 style={{ fontFamily: "var(--font-mono), monospace", fontSize: "17px", fontWeight: 700, margin: "6px 0 10px", color: "var(--text-primary)" }}>
                                     {selectedTask.title}
                                 </h3>
-                                <span className="badge" style={{ background: colorForKey(selectedTask.status) }}>
-                                    {selectedTask.status}
+                                <span className="badge" style={{ background: resolveColor(selectedTask.status).color }}>
+                                    {resolveColor(selectedTask.status).label}
                                 </span>
 
                                 <dl
@@ -760,9 +805,9 @@ export default function CalendarPage() {
                                     <div className="flex flex-col gap-2.5" style={{ marginBottom: "16px" }}>
                                         {selectedTask.segments.map((seg, i) => (
                                             <div key={i} className="flex items-start gap-2.5">
-                                                <span style={{ width: "8px", height: "8px", borderRadius: "999px", background: colorForKey(seg.status), border: "1.5px solid var(--card-border)", marginTop: "4px", flexShrink: 0 }} />
+                                                <span style={{ width: "8px", height: "8px", borderRadius: "999px", background: resolveColor(seg.status).color, border: "1.5px solid var(--card-border)", marginTop: "4px", flexShrink: 0 }} />
                                                 <span className="flex flex-col">
-                                                    <span style={{ fontSize: "13px", fontWeight: 600 }}>{seg.status}</span>
+                                                    <span style={{ fontSize: "13px", fontWeight: 600 }}>{resolveColor(seg.status).label}</span>
                                                     <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
                                                         {new Date(seg.start).toLocaleDateString()} – {new Date(seg.end).toLocaleDateString()}
                                                     </span>

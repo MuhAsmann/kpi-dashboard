@@ -26,11 +26,15 @@ function mapStatusToEnum(statusStr: string): TaskStatus {
         normalized.includes("inprogress") ||
         normalized.includes("progress") ||
         normalized.includes("doing") ||
-        normalized.includes("wip") ||
-        normalized.includes("deployedstaging")
+        normalized.includes("wip")
     ) {
         return "IN_PROGRESS";
     }
+
+    if (normalized.includes("deployedstaging")) {
+        return "STAGING";
+    }
+
     if (normalized.includes("cancel")) {
         return "CANCELLED";
     }

@@ -28,10 +28,6 @@ import {
 } from "@/lib/calendar-utils";
 import {
     LayoutDashboard,
-    ListChecks,
-    GitBranch,
-    Clock,
-    BarChart3,
     Settings,
     HelpCircle,
     Calendar as CalendarIcon,
@@ -46,10 +42,6 @@ interface CalendarSummary {
 const NAV_ITEMS: { icon: typeof LayoutDashboard; label: string; href?: string }[] = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: CalendarIcon, label: "Calendar", href: "/calendar" },
-    { icon: ListChecks, label: "Tasks" },
-    { icon: GitBranch, label: "Repositories" },
-    { icon: Clock, label: "Cycle time" },
-    { icon: BarChart3, label: "Reports" },
 ];
 
 function Sidebar() {

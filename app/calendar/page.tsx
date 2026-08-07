@@ -18,6 +18,8 @@ import {
     buildSegmentBlocks,
     getWeekStart,
     packLanes,
+    getDayItems,
+    statusOnDay,
     MONTH_NAMES,
     DOW_NAMES,
     DAY_MS,
@@ -181,7 +183,10 @@ export default function CalendarPage() {
                     const endLabel = `${MONTH_NAMES[end.getUTCMonth()].slice(0, 3)} ${end.getUTCDate()}, ${end.getUTCFullYear()}`;
                     return `${startLabel} – ${endLabel}`;
                 })()
-                : ""; // filled in Task 7
+                : (() => {
+                    const d = new Date(anchorMs);
+                    return `${DOW_NAMES[d.getUTCDay()]}, ${MONTH_NAMES[d.getUTCMonth()].slice(0, 3)} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
+                })();
 
     const segStyle = (on: boolean): React.CSSProperties => ({
         fontFamily: "var(--font-mono), monospace",
@@ -225,6 +230,7 @@ export default function CalendarPage() {
         () => (view === "week" ? packLanes(weekStartMs, filteredTasks, 12) : { placed: [], hiddenPerDay: [0, 0, 0, 0, 0, 0, 0] }),
         [view, weekStartMs, filteredTasks]
     );
+    const dayItems = useMemo(() => (view === "day" ? getDayItems(anchorMs, filteredTasks) : []), [view, anchorMs, filteredTasks]);
 
     const hasActiveFilters = !!(filters.repository || filters.assignee || filters.label || filters.status);
 
@@ -637,6 +643,43 @@ export default function CalendarPage() {
                                         )}
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {view === "day" && (
+                            <div style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)" }}>
+                                {dayItems.length === 0 ? (
+                                    <div className="flex flex-col items-center justify-center gap-2 text-center" style={{ padding: "48px" }}>
+                                        <p style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, fontSize: "16px", color: "var(--text-primary)" }}>
+                                            No task activity on this day
+                                        </p>
+                                    </div>
+                                ) : (
+                                    dayItems.map((t) => {
+                                        const status = statusOnDay(t, anchorMs);
+                                        return (
+                                            <button
+                                                key={t.id}
+                                                onClick={() => setSelectedTaskId(t.id)}
+                                                className="flex items-center gap-3.5 w-full text-left"
+                                                style={{ padding: "14px 16px", borderBottom: "1.5px dashed var(--dashed)", background: "transparent", cursor: "pointer" }}
+                                            >
+                                                <span style={{ width: "4px", alignSelf: "stretch", minHeight: "34px", background: colorForKey(status), border: "1.5px solid var(--card-border)", flexShrink: 0 }} />
+                                                <span className="flex flex-col gap-1 min-w-0">
+                                                    <span style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, fontSize: "14px", color: "var(--text-primary)" }}>
+                                                        {t.title}
+                                                    </span>
+                                                    <span style={{ fontSize: "12px", color: "var(--text-muted)" }}>
+                                                        {t.repository} · {t.assignee.name ?? t.assignee.github_login}
+                                                    </span>
+                                                </span>
+                                                <span className="ml-auto badge" style={{ background: colorForKey(status) }}>
+                                                    {status}
+                                                </span>
+                                            </button>
+                                        );
+                                    })
+                                )}
                             </div>
                         )}
                     </>

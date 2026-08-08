@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
 import { UserKPI } from "@/lib/kpi-service";
 import { DashboardFilters, SortField } from "@/types/dashboard";
 import SyncButton from "@/components/SyncButton";
@@ -9,15 +10,194 @@ import KPITable from "@/components/KPITable";
 import SummaryCards from "@/components/SummaryCards";
 import FilterBar from "@/components/FilterBar";
 import UserChart from "@/components/UserChart";
-import { Activity, GitBranch } from "lucide-react";
+import StatusMappingModal from "@/components/StatusMappingModal";
+import { PROJECTS } from "@/lib/projects";
+import { LayoutDashboard, ListChecks, GitBranch, Clock, BarChart3, Settings, HelpCircle, Calendar as CalendarIcon } from "lucide-react";
 
 interface DashboardSummary {
     total_tasks: number;
     completed_tasks: number;
     active_tasks: number;
+    unmapped_tasks: number;
     active_users: number;
     total_story_points: number;
     last_sync: string | null;
+}
+
+const NAV_ITEMS: { icon: typeof LayoutDashboard; label: string; active?: boolean; href?: string }[] = [
+    { icon: LayoutDashboard, label: "Dashboard", active: true },
+    { icon: CalendarIcon, label: "Calendar", href: "/calendar" },
+];
+
+function Sidebar() {
+    return (
+        <nav
+            className="flex flex-col items-center sticky top-0 shrink-0"
+            style={{
+                width: "78px",
+                background: "#1A1917",
+                borderRight: "2px solid var(--card-border)",
+                padding: "18px 0 22px",
+                gap: "26px",
+                height: "100vh",
+            }}
+        >
+            <div
+                className="grid place-items-center"
+                style={{
+                    width: "44px",
+                    height: "44px",
+                    background: "var(--accent)",
+                    border: "2px solid var(--card-border)",
+                    boxShadow: "3px 3px 0 #000",
+                    fontFamily: "var(--font-mono), monospace",
+                    fontWeight: 700,
+                    fontSize: "20px",
+                }}
+            >
+                ↗
+            </div>
+            <div className="flex flex-col gap-3.5 items-center mt-1.5">
+                {NAV_ITEMS.map(({ icon: Icon, label, active, href }) => {
+                    const itemStyle: React.CSSProperties = {
+                        width: "42px",
+                        height: "42px",
+                        background: active ? "var(--accent)" : "#2E2C29",
+                        border: `2px solid ${active ? "var(--card-border)" : "#2E2C29"}`,
+                        color: active ? "var(--text-primary)" : "#8B8781",
+                    };
+                    if (href) {
+                        return (
+                            <Link key={label} href={href} title={label} className="grid place-items-center" style={itemStyle}>
+                                <Icon size={17} />
+                            </Link>
+                        );
+                    }
+                    return (
+                        <div key={label} title={active ? label : `${label} (not available yet)`} className="grid place-items-center" style={itemStyle}>
+                            <Icon size={17} />
+                        </div>
+                    );
+                })}
+            </div>
+            <div className="flex flex-col gap-3.5 items-center mt-auto">
+                {[Settings, HelpCircle].map((Icon, i) => (
+                    <div
+                        key={i}
+                        className="grid place-items-center"
+                        style={{ width: "42px", height: "42px", background: "#2E2C29", border: "2px solid #2E2C29", color: "#8B8781" }}
+                    >
+                        <Icon size={17} />
+                    </div>
+                ))}
+            </div>
+        </nav>
+    );
+}
+
+const MIX_PALETTE = ["#CFE6F2", "#F3D8D2", "#D7E8D8", "#E4E3EC", "#FFFDF8"];
+
+function DeliveryMix({ kpis, total }: { kpis: UserKPI[]; total: number }) {
+    const mix = useMemo(() => {
+        const done = kpis.reduce((a, k) => a + k.metrics.completed_tasks, 0);
+        const overdue = kpis.reduce((a, k) => a + k.metrics.overdue_tasks, 0);
+        const unmapped = kpis.reduce((a, k) => a + k.metrics.unmapped_tasks, 0);
+
+        const bucketCounts = new Map<string, number>();
+        kpis.forEach((k) =>
+            k.metrics.bucket_breakdown.forEach((b) => {
+                bucketCounts.set(b.label, (bucketCounts.get(b.label) ?? 0) + b.count);
+            })
+        );
+        const buckets = [...bucketCounts.entries()].map(([label, count], i) => ({
+            label,
+            count,
+            color: MIX_PALETTE[i % MIX_PALETTE.length],
+        }));
+
+        const sum = done + buckets.reduce((a, b) => a + b.count, 0) + unmapped || 1;
+        let deg = 0;
+        const stops: string[] = [];
+        [{ label: "Done", count: done, color: "#F7E7A8" }, ...buckets, { label: "Unmapped", count: unmapped, color: "#A8A49B" }].forEach(
+            ({ count, color }) => {
+                const next = deg + (count / sum) * 360;
+                if (count > 0) stops.push(`${color} ${deg}deg ${next}deg`);
+                deg = next;
+            }
+        );
+        const gauge = `conic-gradient(${stops.join(", ") || "#FFFDF8 0deg 360deg"})`;
+
+        const worst = kpis.length
+            ? [...kpis].sort(
+                (a, b) =>
+                    b.metrics.overdue_tasks - a.metrics.overdue_tasks ||
+                    (b.metrics.avg_cycle_time_days ?? 0) - (a.metrics.avg_cycle_time_days ?? 0)
+            )[0]
+            : null;
+        return { done, buckets, unmapped, overdue, gauge, worst };
+    }, [kpis]);
+
+    const rate = total > 0 ? Math.round((mix.done / total) * 100) : 0;
+
+    return (
+        <div
+            className="flex flex-col items-center min-w-0"
+            style={{
+                background: "var(--accent-lavender)",
+                border: "2px solid var(--card-border)",
+                boxShadow: "5px 5px 0 var(--card-border)",
+                padding: "18px 20px 20px",
+            }}
+        >
+            <div className="w-full flex justify-between items-start">
+                <h2 style={{ fontFamily: "var(--font-mono), monospace", fontSize: "20px", margin: 0, color: "var(--text-primary)" }}>
+                    Delivery mix
+                </h2>
+            </div>
+            <div className="relative" style={{ width: "180px", height: "180px", margin: "18px 0 4px" }}>
+                <div className="absolute inset-0 rounded-full" style={{ border: "2px solid var(--card-border)", background: mix.gauge }} />
+                <div
+                    className="absolute rounded-full flex flex-col items-center justify-center gap-0.5"
+                    style={{ inset: "32px", background: "var(--accent-lavender)", border: "2px solid var(--card-border)" }}
+                >
+                    <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "10.5px", letterSpacing: "0.5px", color: "var(--text-muted)" }}>
+                        TOTAL TASKS
+                    </span>
+                    <span style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, fontSize: "30px", lineHeight: 1, color: "var(--text-primary)" }}>
+                        {total}
+                    </span>
+                </div>
+            </div>
+            <div className="w-full flex flex-col gap-1.5 mt-3" style={{ fontFamily: "var(--font-mono), monospace", fontSize: "12.5px" }}>
+                <div className="flex justify-between pb-1.5" style={{ borderBottom: "1.5px dashed var(--dashed)" }}>
+                    <span>Done</span><span>{mix.done} · {rate}%</span>
+                </div>
+                {mix.buckets.map((b) => (
+                    <div key={b.label} className="flex justify-between pb-1.5" style={{ borderBottom: "1.5px dashed var(--dashed)" }}>
+                        <span>{b.label}</span><span>{b.count}</span>
+                    </div>
+                ))}
+                {mix.unmapped > 0 && (
+                    <div className="flex justify-between pb-1.5" style={{ borderBottom: "1.5px dashed var(--dashed)", color: "var(--text-muted)" }}>
+                        <span>Unmapped</span><span>{mix.unmapped}</span>
+                    </div>
+                )}
+                <div className="flex justify-between">
+                    <span>Overdue</span><span>{mix.overdue}</span>
+                </div>
+            </div>
+            {mix.worst && mix.worst.metrics.overdue_tasks > 0 && (
+                <div
+                    className="w-full mt-4"
+                    style={{ background: "var(--card)", border: "2px solid var(--card-border)", padding: "10px 12px", fontSize: "12.5px", lineHeight: 1.5, color: "var(--text-primary)" }}
+                >
+                    @{mix.worst.user.github_login} has {mix.worst.metrics.overdue_tasks} overdue task
+                    {mix.worst.metrics.overdue_tasks > 1 ? "s" : ""}
+                    {mix.worst.metrics.avg_cycle_time_days != null && ` and the slowest cycle time (${mix.worst.metrics.avg_cycle_time_days}d)`}.
+                </div>
+            )}
+        </div>
+    );
 }
 
 export default function DashboardPage() {
@@ -25,15 +205,18 @@ export default function DashboardPage() {
     const [summary, setSummary] = useState<DashboardSummary | null>(null);
     const [repositories, setRepositories] = useState<string[]>([]);
     const [loading, setLoading] = useState(true);
+    const [mappingModalOpen, setMappingModalOpen] = useState(false);
     const getDefaultFilters = (): DashboardFilters => {
         const now = new Date();
         const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
         const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
         const toDateString = (d: Date) => d.toISOString().split("T")[0];
+
         return {
             startDate: toDateString(firstDay),
             endDate: toDateString(lastDay),
             repository: "",
+            project: "",
             sortBy: "completion_rate",
             sortOrder: "desc",
         };
@@ -86,6 +269,7 @@ export default function DashboardPage() {
             if (filters.startDate) params.set("start_date", filters.startDate);
             if (filters.endDate) params.set("end_date", filters.endDate);
             if (filters.repository) params.set("repository", filters.repository);
+            if (filters.project !== "") params.set("project", String(filters.project));
 
             const [kpiRes, summaryRes] = await Promise.all([
                 fetch(`/api/kpi/users?${params.toString()}`),
@@ -127,110 +311,119 @@ export default function DashboardPage() {
         }));
     };
 
-    return (
-        <div className="min-h-screen" style={{ background: "var(--background)" }}>
-            {/* Background decoration */}
-            <div className="fixed inset-0 overflow-hidden pointer-events-none">
-                <div
-                    className="absolute -top-40 -right-40 w-96 h-96 rounded-full opacity-10 blur-3xl"
-                    style={{
-                        background: "radial-gradient(circle, #6366f1, transparent)",
-                    }}
-                />
-                <div
-                    className="absolute -bottom-40 -left-40 w-96 h-96 rounded-full opacity-10 blur-3xl"
-                    style={{
-                        background: "radial-gradient(circle, #06b6d4, transparent)",
-                    }}
-                />
-            </div>
+    const githubOrg = process.env.NEXT_PUBLIC_GITHUB_ORG_OR_USER || "";
 
-            <div className="relative z-10">
-                {/* Header */}
-                <header
-                    className="border-b sticky top-0 z-50"
-                    style={{
-                        background: "rgba(10, 14, 26, 0.9)",
-                        backdropFilter: "blur(20px)",
-                        borderColor: "rgba(31, 41, 55, 0.8)",
-                    }}
-                >
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                            <div
-                                className="w-9 h-9 rounded-lg flex items-center justify-center"
+    return (
+        <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
+            <Sidebar />
+
+            <main className="flex-1 min-w-0 flex flex-col gap-5" style={{ padding: "26px 30px 60px" }}>
+                <header className="flex items-end justify-between gap-6 flex-wrap">
+                    <div className="flex items-end gap-4 flex-wrap">
+                        <div>
+                            <h1 style={{ fontFamily: "var(--font-mono), monospace", fontWeight: 700, fontSize: "34px", letterSpacing: "-0.5px", margin: 0, color: "var(--text-primary)" }}>
+                                Dev KPI Dashboard
+                            </h1>
+                            <p className="mt-1.5" style={{ fontSize: "13.5px", color: "var(--text-muted)" }}>
+                                GitHub Projects V2
+                                {githubOrg && (
+                                    <>
+                                        {" · "}
+                                        <a href={`https://github.com/${githubOrg}`} target="_blank" rel="noopener noreferrer">
+                                            {githubOrg}
+                                        </a>
+                                    </>
+                                )}
+                            </p>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label
+                                htmlFor="header-project"
+                                style={{ fontFamily: "var(--font-mono), monospace", fontSize: "10.5px", letterSpacing: "1px", textTransform: "uppercase", color: "var(--text-muted)" }}
+                            >
+                                Project
+                            </label>
+                            <select
+                                id="header-project"
+                                value={filters.project}
+                                onChange={(e) => handleFilterChange({ project: e.target.value ? parseInt(e.target.value, 10) : "" })}
+                                title="Scopes filtering, status mapping, export, and sync to this project"
                                 style={{
-                                    background: "linear-gradient(135deg, #6366f1, #8b5cf6)",
+                                    fontFamily: "var(--font-mono), monospace",
+                                    fontWeight: 700,
+                                    fontSize: "13px",
+                                    padding: "9px 12px",
+                                    border: "2px solid var(--card-border)",
+                                    background: "var(--accent)",
+                                    color: "var(--text-primary)",
+                                    cursor: "pointer",
+                                    minWidth: "150px",
                                 }}
                             >
-                                <Activity size={18} className="text-white" />
-                            </div>
-                            <div>
-                                <h1 className="text-lg font-bold gradient-text">
-                                    KPI Dashboard
-                                </h1>
-                                <p
-                                    className="text-xs"
-                                    style={{ color: "var(--text-muted)" }}
-                                >
-                                    Powered by GitHub Projects V2
-                                </p>
-                            </div>
+                                <option value="">All projects</option>
+                                {PROJECTS.map((p) => (
+                                    <option key={p.number} value={p.number}>
+                                        {p.label}
+                                    </option>
+                                ))}
+                            </select>
                         </div>
-                        <div className="flex items-center gap-3">
-                            <a
-                                href={`https://github.com/${process.env.NEXT_PUBLIC_GITHUB_ORG_OR_USER || ""}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all hover:opacity-80"
-                                style={{
-                                    background: "rgba(31,41,55,0.8)",
-                                    color: "var(--text-secondary)",
-                                }}
-                            >
-                                <GitBranch size={14} />
-                                <span className="hidden sm:inline">GitHub</span>
-                            </a>
-                            <ExportButton filters={filters} />
-                            <SyncButton onSyncComplete={fetchData} />
-                        </div>
+                    </div>
+                    <div className="flex gap-3 items-center">
+                        <ExportButton filters={filters} />
+                        <SyncButton project={filters.project} onSyncComplete={fetchData} />
                     </div>
                 </header>
 
-                <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-                    {/* Summary Cards */}
-                    <div className="fade-in-up">
-                        <SummaryCards summary={summary} loading={loading} />
-                    </div>
-
-                    {/* Filter Bar */}
-                    <div className="fade-in-up fade-in-up-delay-1">
-                        <FilterBar
-                            filters={filters}
-                            repositories={repositories}
-                            onFilterChange={handleFilterChange}
-                        />
-                    </div>
-
-                    {/* Chart Section */}
-                    {!loading && kpis.length > 0 && (
-                        <div className="fade-in-up fade-in-up-delay-2">
-                            <UserChart kpis={kpis} />
-                        </div>
+                <div className="fade-in-up fade-in-up-delay-1 flex flex-col gap-2 relative z-30">
+                    <FilterBar
+                        filters={filters}
+                        repositories={repositories}
+                        onFilterChange={handleFilterChange}
+                        onOpenStatusMapping={() => setMappingModalOpen(true)}
+                    />
+                    {!loading && !!summary?.unmapped_tasks && (
+                        <p style={{ fontFamily: "var(--font-mono), monospace", fontSize: "12px", color: "var(--warning)" }}>
+                            ⚠ {summary.unmapped_tasks} task{summary.unmapped_tasks > 1 ? "s have" : " has"} a status with no KPI mapping yet —{" "}
+                            <button
+                                onClick={() => setMappingModalOpen(true)}
+                                style={{ textDecoration: "underline", cursor: "pointer" }}
+                            >
+                                map it in Status mapping
+                            </button>
+                            .
+                        </p>
                     )}
+                </div>
 
-                    {/* KPI Table */}
-                    <div className="fade-in-up fade-in-up-delay-3">
-                        <KPITable
-                            kpis={kpis}
-                            loading={loading}
-                            sortBy={filters.sortBy}
-                            sortOrder={filters.sortOrder}
-                            onSort={handleSort}
-                        />
+                <StatusMappingModal
+                    open={mappingModalOpen}
+                    onClose={() => setMappingModalOpen(false)}
+                    onSaved={fetchData}
+                    projectNumber={filters.project || undefined}
+                />
+
+                <div className="fade-in-up">
+                    <SummaryCards summary={summary} loading={loading} />
+                </div>
+
+                {!loading && kpis.length > 0 && (
+                    <div className="fade-in-up fade-in-up-delay-2 grid gap-5 items-stretch" style={{ gridTemplateColumns: "minmax(0, 2.15fr) minmax(0, 1fr)" }}>
+                        <UserChart kpis={kpis} />
+                        <DeliveryMix kpis={kpis} total={summary?.total_tasks ?? 0} />
                     </div>
-                </main>
-            </div>
+                )}
+
+                <div className="fade-in-up fade-in-up-delay-3">
+                    <KPITable
+                        kpis={kpis}
+                        loading={loading}
+                        sortBy={filters.sortBy}
+                        sortOrder={filters.sortOrder}
+                        onSort={handleSort}
+                    />
+                </div>
+            </main>
         </div>
     );
 }

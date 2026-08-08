@@ -15,7 +15,7 @@ export default function ExportButton({ filters }: ExportButtonProps) {
         if (filters.repository) params.set("repository", filters.repository);
 
         const downloadUrl = `/api/export?${params.toString()}`;
-        
+
         // Create an invisible anchor element and trigger download
         const a = document.createElement("a");
         a.href = downloadUrl;
@@ -28,16 +28,17 @@ export default function ExportButton({ filters }: ExportButtonProps) {
     return (
         <button
             onClick={handleExport}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-all hover:opacity-80"
+            className="neo-btn flex items-center gap-2"
             style={{
-                background: "rgba(16, 185, 129, 0.2)",
-                color: "#34d399",
-                border: "1px solid rgba(16, 185, 129, 0.3)",
+                fontSize: "13px",
+                padding: "11px 16px",
+                background: "var(--card)",
+                color: "var(--text-primary)",
             }}
             title="Export data to CSV"
         >
             <Download size={14} />
-            <span className="hidden sm:inline">Export</span>
+            <span className="hidden sm:inline">Export CSV</span>
         </button>
     );
 }

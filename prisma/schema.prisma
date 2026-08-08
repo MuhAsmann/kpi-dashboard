@@ -20,7 +20,7 @@ model User {
 
 model Task {
   id                  String        @id @default(cuid())
-  github_issue_id     String        @unique
+  github_issue_id     String
   github_issue_number Int?
   title               String
   body                String?
@@ -28,7 +28,7 @@ model Task {
   created_at          DateTime
   closed_at           DateTime?
   updated_at          DateTime      @updatedAt
-  status              TaskStatus    @default(TODO)
+  status              String        @default("Todo")
   repository          String?
   project_title       String?
   assignee_id         String?
@@ -36,10 +36,12 @@ model Task {
   start_date          DateTime?
   type                String?       @default("Issue")
   story_points        Float?
+  project_number      Int?
   histories           TaskHistory[]
   labels              TaskLabel[]
   assignee            User?         @relation(fields: [assignee_id], references: [id])
 
+  @@unique([github_issue_id, project_number])
   @@map("tasks")
 }
 
@@ -55,14 +57,37 @@ model TaskLabel {
 }
 
 model TaskHistory {
-  id         String      @id @default(cuid())
+  id         String   @id @default(cuid())
   task_id    String
-  old_status TaskStatus?
-  new_status TaskStatus
-  changed_at DateTime    @default(now())
-  task       Task        @relation(fields: [task_id], references: [id], onDelete: Cascade)
+  old_status String?
+  new_status String
+  changed_at DateTime @default(now())
+  task       Task     @relation(fields: [task_id], references: [id], onDelete: Cascade)
 
   @@map("task_histories")
+}
+
+model ProjectBucket {
+  id             String          @id @default(cuid())
+  project_number Int
+  label          String
+  is_done        Boolean         @default(false)
+  sort_order     Int             @default(0)
+  mappings       StatusMapping[]
+
+  @@unique([project_number, label])
+  @@map("project_buckets")
+}
+
+model StatusMapping {
+  id             String         @id @default(cuid())
+  project_number Int
+  raw_status     String
+  bucket_id      String?
+  bucket         ProjectBucket? @relation(fields: [bucket_id], references: [id])
+
+  @@unique([project_number, raw_status])
+  @@map("status_mappings")
 }
 
 model SyncLog {
@@ -74,14 +99,6 @@ model SyncLog {
   items_synced Int        @default(0)
 
   @@map("sync_logs")
-}
-
-enum TaskStatus {
-  TODO
-  IN_PROGRESS
-  DONE
-  CANCELLED
-  STAGING
 }
 
 enum SyncStatus {

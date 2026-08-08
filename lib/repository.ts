@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Task, TaskStatus, User } from "@prisma/client";
+import { Task, User } from "@prisma/client";
 
 // ============ USER REPOSITORY ============
 
@@ -41,14 +41,20 @@ export async function upsertTask(data: {
     start_date?: Date | null;
     end_date?: Date | null;
     type?: string | null;
-    status: TaskStatus;
+    status: string;
     assignee_id?: string | null;
     repository?: string | null;
+    project_number: number;
     project_title?: string | null;
     story_points?: number | null;
 }): Promise<Task> {
     return prisma.task.upsert({
-        where: { github_issue_id: data.github_issue_id },
+        where: {
+            github_issue_id_project_number: {
+                github_issue_id: data.github_issue_id,
+                project_number: data.project_number,
+            },
+        },
         update: {
             title: data.title,
             body: data.body,
@@ -77,6 +83,7 @@ export async function upsertTask(data: {
             status: data.status,
             assignee_id: data.assignee_id,
             repository: data.repository,
+            project_number: data.project_number,
             project_title: data.project_title,
             story_points: data.story_points,
         },
@@ -106,8 +113,8 @@ export async function upsertTaskLabels(
 export async function syncTaskHistories(
     taskId: string,
     histories: Array<{
-        old_status: TaskStatus | null;
-        new_status: TaskStatus;
+        old_status: string | null;
+        new_status: string;
         changed_at: Date;
     }>
 ): Promise<void> {

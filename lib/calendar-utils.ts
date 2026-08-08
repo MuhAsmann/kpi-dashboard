@@ -37,20 +37,25 @@ export function toDayMs(dateInput: string | Date): number {
  * Builds one segment per raw-status run for a task, from its `TaskHistory` transitions.
  * The first segment's status is the earliest known status (the first history row's
  * `old_status`, or the task's own current `status` if there's no history at all).
- * The last segment ends at `closed_at` (actual) if closed, else `end_date` (planned target)
- * if set, else `todayMs` (still open, no known end date).
+ * The last segment ends at `closed_at` (actual close) if set, else — if the task's current
+ * status maps to a "done" KPI bucket (`is_done`, computed server-side since raw status text
+ * alone can't tell us that) — the day it transitioned into that status, so a done task stops
+ * appearing on the calendar instead of re-rendering every day up to today. Otherwise it ends
+ * at `end_date` (planned target) if set, else `todayMs` (still open, no known end date).
  */
 export function buildSegments(task: CalendarTask, todayMs: number): CalendarSegment[] {
     const startMs = toDayMs(task.start_date ?? task.created_at);
-    const finalEndMs = task.closed_at
-        ? toDayMs(task.closed_at)
-        : task.end_date
-            ? toDayMs(task.end_date)
-            : todayMs;
-
     const history = [...task.histories].sort(
         (a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime()
     );
+
+    const finalEndMs = task.closed_at
+        ? toDayMs(task.closed_at)
+        : task.is_done
+            ? toDayMs(history.length > 0 ? history[history.length - 1].changed_at : task.start_date ?? task.created_at)
+            : task.end_date
+                ? toDayMs(task.end_date)
+                : todayMs;
 
     if (history.length === 0) {
         return [{ status: task.status, start: startMs, end: Math.max(startMs, finalEndMs) }];

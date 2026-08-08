@@ -9,7 +9,7 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  allowedDevOrigins: ['192.168.20.108'],
+  allowedDevOrigins: ['loralee-preperusal-kole.ngrok-free.dev'],
 };
 
 export default nextConfig;

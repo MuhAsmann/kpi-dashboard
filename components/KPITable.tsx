@@ -201,6 +201,7 @@ export default function KPITable({
                                                                 src={kpi.user.avatar_url}
                                                                 alt={kpi.user.github_login}
                                                                 fill
+                                                                sizes="34px"
                                                                 className="object-cover"
                                                             />
                                                         ) : (

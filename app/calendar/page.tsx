@@ -366,10 +366,61 @@ export default function CalendarPage() {
                 <div className="flex gap-5 items-start min-w-0">
                     <div className="flex-1 min-w-0 flex flex-col gap-5">
                         {loading ? (
-                            <div className="flex flex-col gap-3">
-                                {[1, 2, 3, 4].map((i) => (
-                                    <div key={i} className="h-16 animate-pulse" style={{ background: "var(--card-alt)", border: "2px solid var(--card-border)" }} />
-                                ))}
+                            <div className="flex flex-col gap-5 animate-pulse">
+                                <div
+                                    className="flex items-end gap-3.5 flex-wrap"
+                                    style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)", padding: "14px 16px" }}
+                                >
+                                    {[0, 1, 2, 3].map((i) => (
+                                        <div key={i} className="flex flex-col gap-1.5">
+                                            <div style={{ width: "70px", height: "9px", background: "var(--card-alt)" }} />
+                                            <div style={{ width: "150px", height: "34px", background: "var(--card-alt)", border: "2px solid var(--card-border)" }} />
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div
+                                    className="flex items-center justify-between gap-4 flex-wrap"
+                                    style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)", padding: "12px 16px" }}
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div style={{ width: "108px", height: "32px", background: "var(--card-alt)" }} />
+                                        <div style={{ width: "140px", height: "18px", background: "var(--card-alt)" }} />
+                                    </div>
+                                    <div style={{ width: "260px", height: "32px", background: "var(--card-alt)" }} />
+                                </div>
+
+                                <div style={{ width: "160px", height: "13px", background: "var(--card-alt)" }} />
+
+                                <div style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)" }}>
+                                    <div className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", borderBottom: "2px solid var(--card-border)" }}>
+                                        {DOW_NAMES.map((d) => (
+                                            <div
+                                                key={d}
+                                                style={{
+                                                    padding: "9px 12px",
+                                                    fontFamily: "var(--font-mono), monospace",
+                                                    fontSize: "10.5px",
+                                                    fontWeight: 700,
+                                                    letterSpacing: "0.05em",
+                                                    textTransform: "uppercase",
+                                                    color: "var(--text-muted)",
+                                                }}
+                                            >
+                                                {d.slice(0, 3)}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    {[0, 1, 2, 3, 4, 5].map((w) => (
+                                        <div key={w} className="grid" style={{ gridTemplateColumns: "repeat(7, 1fr)", minHeight: "124px", borderBottom: "1.5px dashed var(--dashed)" }}>
+                                            {Array.from({ length: 7 }, (_, i) => (
+                                                <div key={i} style={{ borderLeft: "1.5px dashed var(--dashed)", padding: "7px 9px" }}>
+                                                    <div style={{ width: "20px", height: "20px", borderRadius: "999px", background: "var(--card-alt)" }} />
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ))}
+                                </div>
                             </div>
                         ) : (
                             <>
@@ -437,8 +488,10 @@ export default function CalendarPage() {
                                 </div>
 
                                 <div
-                                    className="flex items-center justify-between gap-4 flex-wrap"
-                                    style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)", padding: "12px 16px" }}
+                                    className="flex items-center justify-between gap-4 flex-wrap "
+                                    style={{ background: "var(--card)", border: "2px solid var(--card-border)", boxShadow: "5px 5px 0 var(--card-border)", padding: "12px 16px", position: "sticky",
+                                        top: "16px",
+                                        zIndex: 10, }}
                                 >
                                     <div className="flex items-center gap-3">
                                         <div className="flex gap-1.5">
@@ -526,23 +579,31 @@ export default function CalendarPage() {
                                                             return (
                                                                 <div key={day.dateMs} style={{ borderLeft: "1.5px dashed var(--dashed)", background: day.isCurrentMonth ? "transparent" : "var(--card-alt)", overflow: "hidden" }}>
                                                                     <div className="flex items-center gap-1.5" style={{ padding: "7px 9px 0" }}>
-                                                                        <span
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setAnchorMs(day.dateMs);
+                                                                                setView("day");
+                                                                            }}
+                                                                            title={`View ${MONTH_NAMES[new Date(day.dateMs).getUTCMonth()]} ${day.dayNumber}`}
                                                                             style={{
                                                                                 fontFamily: "var(--font-mono), monospace",
                                                                                 fontSize: "12px",
                                                                                 fontWeight: 700,
                                                                                 color: day.isToday ? "var(--card)" : day.isCurrentMonth ? "var(--text-primary)" : "var(--text-muted)",
                                                                                 background: day.isToday ? "var(--text-primary)" : "transparent",
+                                                                                border: "none",
                                                                                 borderRadius: "999px",
                                                                                 width: "20px",
                                                                                 height: "20px",
                                                                                 display: "inline-flex",
                                                                                 alignItems: "center",
                                                                                 justifyContent: "center",
+                                                                                cursor: "pointer",
+                                                                                padding: 0,
                                                                             }}
                                                                         >
                                                                             {day.dayNumber}
-                                                                        </span>
+                                                                        </button>
                                                                         {day.monthLabel && (
                                                                             <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "10.5px", color: "var(--text-muted)" }}>{day.monthLabel}</span>
                                                                         )}
@@ -769,6 +830,10 @@ export default function CalendarPage() {
                                 background: "var(--card)",
                                 border: "2px solid var(--card-border)",
                                 boxShadow: "6px 6px 0 var(--card-border)",
+                                position: "sticky",
+                                top: "16px",
+                                maxHeight: "calc(100vh - 32px)",
+                                overflowY: "auto",
                             }}
                         >
                             <div className="flex items-center justify-between gap-3" style={{ padding: "14px 16px", borderBottom: "2px solid var(--card-border)" }}>

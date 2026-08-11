@@ -28,13 +28,19 @@ dependency).
 - Props: `{ task: KpiTask | null; onClose: () => void }` — `open` is implied by `task` being
   non-null.
 - Header: task title, close button.
-- Body: every `task.histories` entry, in order, each rendered as a row with:
-  - status chip (`new_status`)
-  - timestamp (`changed_at`)
-  - **duration**: how long the task remained in that status.
+- Body, two sections:
+  1. **Summary** — one row per *distinct* status, e.g. a task that went
+     `TODO → In progress → Ready to review → In progress → Ready to review` shows
+     `In progress: 2h 30m` (2h + 30m summed across both visits), not two separate rows.
+     Ordered by total duration descending.
+  2. **Timeline** — every `task.histories` entry in chronological order (unchanged from
+     original design), each row showing:
+     - status chip (`new_status`)
+     - timestamp (`changed_at`)
+     - duration of that specific visit (not the summed total).
 
 ### Duration calculation
-For history entry `i`:
+For history entry `i` (this is one "visit" to `history[i].new_status`):
 ```
 end_i = history[i+1].changed_at
         (or, for the last entry: closed_at ?? (is_done ? that entry's own changed_at : now))
@@ -43,6 +49,10 @@ duration_i = end_i - history[i].changed_at
 This mirrors the existing `closed_at ?? (is_done ? lastHistoryTime : null) ?? now` fallback
 chain already used by `buildSegments` in `lib/calendar-utils.ts`, so "when does an open task
 stop counting" stays consistent across the app.
+
+**Summary totals** are computed by grouping all visits by `new_status` and summing their
+`duration_i` — so a status the task revisited (moved away from and back to) reports one
+combined total rather than one row per visit.
 
 ### Duration format
 Precise, top-two-units:

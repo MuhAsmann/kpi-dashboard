@@ -34,6 +34,7 @@ const byStatus = Object.fromEntries(summary.map((s) => [s.status, s.totalMs]));
 assert.strictEqual(byStatus["TODO"], 50 * MIN);
 assert.strictEqual(byStatus["In progress"], 2 * HOUR + 30 * MIN); // summed across both visits
 assert.strictEqual(byStatus["Ready to review"], 1 * HOUR + 45 * MIN);
+assert.deepStrictEqual(summary.map((s) => s.status), ["In progress", "Ready to review", "TODO"]);
 
 assert.strictEqual(formatDuration(2 * HOUR + 30 * MIN), "2h 30m");
 assert.strictEqual(formatDuration(50 * MIN), "50m");

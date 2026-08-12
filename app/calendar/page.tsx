@@ -3,7 +3,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import Link from "next/link";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format } from "date-fns";
 import { UserKPI } from "@/lib/kpi-service";
 import { PROJECTS } from "@/lib/projects";
 import {
@@ -860,9 +860,9 @@ export default function CalendarPage() {
                                     <dt style={{ color: "var(--text-muted)" }}>Assignee</dt>
                                     <dd style={{ margin: 0, fontWeight: 600 }}>{selectedTask.assignee.name ?? selectedTask.assignee.github_login}</dd>
                                     <dt style={{ color: "var(--text-muted)" }}>Started</dt>
-                                    <dd style={{ margin: 0 }}>{new Date(selectedTask.spanStart).toLocaleDateString()}</dd>
+                                    <dd style={{ margin: 0 }}>{format(new Date(selectedTask.segments[0].rawStart), "MMM d, yyyy, h:mm a")}</dd>
                                     <dt style={{ color: "var(--text-muted)" }}>{selectedTask.closed_at ? "Closed" : "Target"}</dt>
-                                    <dd style={{ margin: 0 }}>{new Date(selectedTask.spanEnd).toLocaleDateString()}</dd>
+                                    <dd style={{ margin: 0 }}>{format(new Date(selectedTask.segments[selectedTask.segments.length - 1].rawEnd), "MMM d, yyyy, h:mm a")}</dd>
                                     <dt style={{ color: "var(--text-muted)" }}>Duration</dt>
                                     <dd style={{ margin: 0 }}>
                                         {Math.round((selectedTask.spanEnd - selectedTask.spanStart) / DAY_MS) + 1} days
@@ -891,7 +891,7 @@ export default function CalendarPage() {
                                                 <span className="flex flex-col">
                                                     <span style={{ fontSize: "13px", fontWeight: 600 }}>{resolveColor(seg.status).label}</span>
                                                     <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                                                        {new Date(seg.start).toLocaleDateString()} – {new Date(seg.end).toLocaleDateString()}
+                                                        {format(new Date(seg.rawStart), "MMM d, h:mm a")} – {format(new Date(seg.rawEnd), "MMM d, h:mm a")}
                                                     </span>
                                                 </span>
                                             </div>

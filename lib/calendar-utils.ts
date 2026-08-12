@@ -19,6 +19,9 @@ export interface CalendarSegment {
     status: string;
     start: number;
     end: number;
+    /** Same span as start/end, but the real (un-rounded) instants — for display, not grid layout. */
+    rawStart: number;
+    rawEnd: number;
 }
 
 export interface ComputedTask extends CalendarTask {
@@ -44,38 +47,41 @@ export function toDayMs(dateInput: string | Date): number {
  * at `end_date` (planned target) if set, else `todayMs` (still open, no known end date).
  */
 export function buildSegments(task: CalendarTask, todayMs: number): CalendarSegment[] {
-    const startMs = toDayMs(task.start_date ?? task.created_at);
+    const startSource = task.start_date ?? task.created_at;
+    const startMs = toDayMs(startSource);
+    const rawStartMs = new Date(startSource).getTime();
     const history = [...task.histories].sort(
         (a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime()
     );
 
-    const finalEndMs = task.closed_at
-        ? toDayMs(task.closed_at)
-        : task.is_done
-            ? toDayMs(history.length > 0 ? history[history.length - 1].changed_at : task.start_date ?? task.created_at)
-            : task.end_date
-                ? toDayMs(task.end_date)
-                : todayMs;
+    const finalEndSource = task.closed_at
+        ?? (task.is_done ? history[history.length - 1]?.changed_at ?? startSource : null)
+        ?? task.end_date
+        ?? null;
+    const finalEndMs = finalEndSource ? toDayMs(finalEndSource) : todayMs;
+    const rawFinalEndMs = finalEndSource ? new Date(finalEndSource).getTime() : todayMs;
 
     if (history.length === 0) {
-        return [{ status: task.status, start: startMs, end: Math.max(startMs, finalEndMs) }];
+        return [{ status: task.status, start: startMs, end: Math.max(startMs, finalEndMs), rawStart: rawStartMs, rawEnd: Math.max(rawStartMs, rawFinalEndMs) }];
     }
 
-    const points: { status: string; start: number }[] = [
-        { status: history[0].old_status ?? history[0].new_status, start: startMs },
-        ...history.map((h) => ({ status: h.new_status, start: toDayMs(h.changed_at) })),
+    const points: { status: string; start: number; rawStart: number }[] = [
+        { status: history[0].old_status ?? history[0].new_status, start: startMs, rawStart: rawStartMs },
+        ...history.map((h) => ({ status: h.new_status, start: toDayMs(h.changed_at), rawStart: new Date(h.changed_at).getTime() })),
     ];
 
     const segments: CalendarSegment[] = [];
     for (let i = 0; i < points.length; i++) {
         const segStart = i === 0 ? startMs : points[i].start;
+        const segRawStart = i === 0 ? rawStartMs : points[i].rawStart;
         const segEnd = i < points.length - 1 ? points[i + 1].start - DAY_MS : finalEndMs;
+        const segRawEnd = i < points.length - 1 ? points[i + 1].rawStart : rawFinalEndMs;
         if (segEnd >= segStart) {
-            segments.push({ status: points[i].status, start: segStart, end: segEnd });
+            segments.push({ status: points[i].status, start: segStart, end: segEnd, rawStart: segRawStart, rawEnd: segRawEnd });
         }
     }
     if (segments.length === 0) {
-        return [{ status: points[points.length - 1].status, start: finalEndMs, end: finalEndMs }];
+        return [{ status: points[points.length - 1].status, start: finalEndMs, end: finalEndMs, rawStart: rawFinalEndMs, rawEnd: rawFinalEndMs }];
     }
     return segments;
 }

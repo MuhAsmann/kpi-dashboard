@@ -10,9 +10,20 @@ export default function DailyTimeline() {
     const { data, method } = useDailyTimelineHooks()
     const [mappingModalOpen, setMappingModalOpen] = useState(false)
 
+    const onClickRefresh = () => {
+        method.fetchSummary()
+        method.fetchOpsiPIC();
+        method.fetchDailyTimeline();
+    }
+
     useEffect(() => {
         method.fetchSummary()
+        method.fetchOpsiPIC();
     }, [data.filters?.project])
+
+    useEffect(() => {
+        method.fetchDailyTimeline()
+    }, [data.filters?.id_user, data.filters?.project, data.filters?.repository, data.filters?.date])
 
     return (
         <main className="flex-1 min-w-0 flex flex-col gap-5" style={{ padding: "26px 30px 60px" }}>
@@ -81,7 +92,7 @@ export default function DailyTimeline() {
                 </div>
                 <button
                     id="calendar-refresh-btn"
-                    onClick={method.fetchSummary}
+                    onClick={onClickRefresh}
                     disabled={data.loading}
                     className="neo-btn flex items-center gap-2"
                     style={{ fontSize: "13px", padding: "11px 18px", background: "var(--accent)", color: "var(--text-primary)" }}
@@ -99,6 +110,7 @@ export default function DailyTimeline() {
             <div className="fade-in-up fade-in-up-delay-1 flex flex-col gap-2 relative z-30">
                 <FilterBar
                     filters={data.filters}
+                    opsiUsers={data.opsiUsers}
                     repositories={data.summary?.repositories || []}
                     onFilterChange={(newFilters) => method.setFilters((prev) => ({ ...prev, ...newFilters }))}
                     onOpenStatusMapping={() => setMappingModalOpen(true)}

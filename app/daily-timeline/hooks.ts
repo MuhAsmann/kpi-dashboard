@@ -1,5 +1,6 @@
 import { FilterDailyTimeline } from "@/types/daily--timeline";
 import { CalendarSummary } from "@/types/summary";
+import { Users } from "@/types/user";
 import { useCallback, useState } from "react";
 
 const getDefaultFilters = (): FilterDailyTimeline => {
@@ -17,6 +18,7 @@ export const useDailyTimelineHooks = () => {
 
     const [summary, setSummary] = useState<CalendarSummary | null>(null);
     const [filters, setFilters] = useState<FilterDailyTimeline>(getDefaultFilters());
+    const [opsiUsers, setOpsiUsers] = useState<{ id: string, name: string }[]>([])
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -46,16 +48,63 @@ export const useDailyTimelineHooks = () => {
         }
     }, [filters?.project]);
 
+    const fetchOpsiPIC = useCallback(async () => {
+        try {
+            const query = new URLSearchParams({
+                ...(filters?.project && { project: String(filters.project) }),
+                ...(filters?.date && { date: String(filters.date) })
+            });
+
+            const res = await fetch(`/api/kpi/users?${query.toString()}`);
+
+            if (!res.ok) {
+                throw new Error(`Request failed with status ${res.status}`);
+            }
+
+            const data: Users[] = await res.json();
+            setOpsiUsers(data?.map((e) => e.user));
+
+        } catch (err) {
+            console.error("Failed to fetch summary data:", err);
+        }
+    }, [filters.project]);
+
+    const fetchDailyTimeline = useCallback(async () => {
+        try {
+            const query = new URLSearchParams({
+                ...(filters?.project && { project: String(filters.project) }),
+                ...(filters?.date && { date: String(filters.date) }),
+                ...(filters?.id_user && { id_user: String(filters.id_user) }),
+                ...(filters?.repository && { repository: String(filters.repository) })
+            });
+
+            const res = await fetch(`/api/kpi/daily-timeline?${query.toString()}`);
+
+            if (!res.ok) {
+                throw new Error(`Request failed with status ${res.status}`);
+            }
+
+            const data: Users[] = await res.json();
+            console.log(data)
+
+        } catch (err) {
+            console.error("Failed to fetch summary data:", err);
+        }
+    }, [filters.project]);
+
     return {
         data: {
             summary,
+            opsiUsers,
             loading,
             error,
             filters
         },
         method: {
             setFilters,
-            fetchSummary
+            fetchSummary,
+            fetchOpsiPIC,
+            fetchDailyTimeline
         }
     }
 }

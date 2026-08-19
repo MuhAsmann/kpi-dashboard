@@ -10,6 +10,7 @@ interface FilterBarProps {
     repositories: string[];
     onFilterChange: (filters: Partial<FilterDailyTimeline>) => void;
     onOpenStatusMapping: () => void;
+    opsiUsers: {id: string, name: string}[]
 }
 
 const labelStyle: React.CSSProperties = {
@@ -32,37 +33,10 @@ const inputStyle: React.CSSProperties = {
 export default function FilterBar({
     filters,
     repositories,
+    opsiUsers,
     onFilterChange,
     onOpenStatusMapping,
 }: FilterBarProps) {
-
-    const [opsiUsers, setOpsiUsers] = useState<{ id: string, name: string }[]>([])
-
-    const fetchOpsiPIC = useCallback(async () => {
-        try {
-            const query = new URLSearchParams({
-                ...(filters?.project && { project: String(filters.project) }),
-                ...(filters?.date && { date: String(filters.date) })
-            });
-
-            const res = await fetch(`/api/kpi/users?${query.toString()}`);
-
-            if (!res.ok) {
-                throw new Error(`Request failed with status ${res.status}`);
-            }
-
-            const data: Users[] = await res.json();
-            setOpsiUsers(data?.map((e) => e.user));
-
-        } catch (err) {
-            console.error("Failed to fetch summary data:", err);
-        }
-    }, [filters.project]);
-
-    useEffect(() => {
-        fetchOpsiPIC();
-    }, [filters?.project])
-
     const hasActiveFilters =
         filters.date || filters.repository || filters.project !== "";
 

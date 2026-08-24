@@ -1,4 +1,5 @@
 import { FilterDailyTimeline } from "@/types/daily--timeline";
+import { DailyWorkEntry } from "@/types/daily-work";
 import { CalendarSummary } from "@/types/summary";
 import { Users } from "@/types/user";
 import { useCallback, useState } from "react";
@@ -19,6 +20,8 @@ export const useDailyTimelineHooks = () => {
     const [summary, setSummary] = useState<CalendarSummary | null>(null);
     const [filters, setFilters] = useState<FilterDailyTimeline>(getDefaultFilters());
     const [opsiUsers, setOpsiUsers] = useState<{ id: string, name: string }[]>([])
+    const [timelineData, setTimelineData] = useState<DailyWorkEntry[]>([])
+    const [timelineLoading, setTimelineLoading] = useState(false)
 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -70,11 +73,12 @@ export const useDailyTimelineHooks = () => {
     }, [filters.project]);
 
     const fetchDailyTimeline = useCallback(async () => {
+        setTimelineLoading(true);
         try {
             const query = new URLSearchParams({
                 ...(filters?.project && { project: String(filters.project) }),
                 ...(filters?.date && { date: String(filters.date) }),
-                ...(filters?.id_user && { id_user: String(filters.id_user) }),
+                ...(filters?.id_user && { user_id: String(filters.id_user) }),
                 ...(filters?.repository && { repository: String(filters.repository) })
             });
 
@@ -84,18 +88,22 @@ export const useDailyTimelineHooks = () => {
                 throw new Error(`Request failed with status ${res.status}`);
             }
 
-            const data: Users[] = await res.json();
-            console.log(data)
+            const data: DailyWorkEntry[] = await res.json();
+            setTimelineData(data);
 
         } catch (err) {
-            console.error("Failed to fetch summary data:", err);
+            console.error("Failed to fetch daily timeline:", err);
+        } finally {
+            setTimelineLoading(false);
         }
-    }, [filters.project]);
+    }, [filters.project, filters.date, filters.id_user, filters.repository]);
 
     return {
         data: {
             summary,
             opsiUsers,
+            timelineData,
+            timelineLoading,
             loading,
             error,
             filters

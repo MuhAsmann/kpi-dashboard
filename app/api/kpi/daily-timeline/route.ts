@@ -17,7 +17,7 @@ export interface DailyWorkEntry {
 }
 
 /**
- * GET /api/kpi/daily-work
+ * GET /api/kpi/daily-timeline
  *
  * Returns a flat list of task-status changes that happened on a given day,
  * each annotated with the hour, assignee info, and whether the task is
@@ -99,7 +99,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
         const message =
             error instanceof Error ? error.message : "An unknown error occurred";
-        console.error("[API /kpi/daily-work] Error:", message);
+        console.error("[API /kpi/daily-timeline] Error:", message);
         return NextResponse.json({ error: message }, { status: 500 });
     }
 }

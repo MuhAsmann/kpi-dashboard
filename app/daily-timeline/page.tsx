@@ -4,6 +4,7 @@ import { PROJECTS } from "@/lib/projects";
 import { useDailyTimelineHooks } from "./hooks";
 import { useEffect, useState } from "react";
 import FilterBar from "./section/filterSection";
+import TimelineSection from "./section/timelineSection";
 import StatusMappingModal from "@/components/StatusMappingModal";
 
 export default function DailyTimeline() {
@@ -114,6 +115,13 @@ export default function DailyTimeline() {
                     repositories={data.summary?.repositories || []}
                     onFilterChange={(newFilters) => method.setFilters((prev) => ({ ...prev, ...newFilters }))}
                     onOpenStatusMapping={() => setMappingModalOpen(true)}
+                />
+            </div>
+
+            <div className="fade-in-up fade-in-up-delay-2">
+                <TimelineSection
+                    data={data.timelineData}
+                    loading={data.timelineLoading}
                 />
             </div>
 

@@ -1,18 +1,16 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
-import Link from "next/link";
-import { UserKPI } from "@/lib/kpi-service";
-import { DashboardFilters, SortField } from "@/types/dashboard";
-import SyncButton from "@/components/SyncButton";
 import ExportButton from "@/components/ExportButton";
-import KPITable from "@/components/KPITable";
-import SummaryCards from "@/components/SummaryCards";
 import FilterBar from "@/components/FilterBar";
-import UserChart from "@/components/UserChart";
+import KPITable from "@/components/KPITable";
 import StatusMappingModal from "@/components/StatusMappingModal";
+import SummaryCards from "@/components/SummaryCards";
+import SyncButton from "@/components/SyncButton";
+import UserChart from "@/components/UserChart";
+import { UserKPI } from "@/lib/kpi-service";
 import { PROJECTS } from "@/lib/projects";
-import { LayoutDashboard, ListChecks, GitBranch, Clock, BarChart3, Settings, HelpCircle, Calendar as CalendarIcon } from "lucide-react";
+import { DashboardFilters, SortField } from "@/types/dashboard";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface DashboardSummary {
     total_tasks: number;
@@ -22,77 +20,6 @@ interface DashboardSummary {
     active_users: number;
     total_story_points: number;
     last_sync: string | null;
-}
-
-const NAV_ITEMS: { icon: typeof LayoutDashboard; label: string; active?: boolean; href?: string }[] = [
-    { icon: LayoutDashboard, label: "Dashboard", active: true },
-    { icon: CalendarIcon, label: "Calendar", href: "/calendar" },
-];
-
-function Sidebar() {
-    return (
-        <nav
-            className="flex flex-col items-center sticky top-0 shrink-0"
-            style={{
-                width: "78px",
-                background: "#1A1917",
-                borderRight: "2px solid var(--card-border)",
-                padding: "18px 0 22px",
-                gap: "26px",
-                height: "100vh",
-            }}
-        >
-            <div
-                className="grid place-items-center"
-                style={{
-                    width: "44px",
-                    height: "44px",
-                    background: "var(--accent)",
-                    border: "2px solid var(--card-border)",
-                    boxShadow: "3px 3px 0 #000",
-                    fontFamily: "var(--font-mono), monospace",
-                    fontWeight: 700,
-                    fontSize: "20px",
-                }}
-            >
-                ↗
-            </div>
-            <div className="flex flex-col gap-3.5 items-center mt-1.5">
-                {NAV_ITEMS.map(({ icon: Icon, label, active, href }) => {
-                    const itemStyle: React.CSSProperties = {
-                        width: "42px",
-                        height: "42px",
-                        background: active ? "var(--accent)" : "#2E2C29",
-                        border: `2px solid ${active ? "var(--card-border)" : "#2E2C29"}`,
-                        color: active ? "var(--text-primary)" : "#8B8781",
-                    };
-                    if (href) {
-                        return (
-                            <Link key={label} href={href} title={label} className="grid place-items-center" style={itemStyle}>
-                                <Icon size={17} />
-                            </Link>
-                        );
-                    }
-                    return (
-                        <div key={label} title={active ? label : `${label} (not available yet)`} className="grid place-items-center" style={itemStyle}>
-                            <Icon size={17} />
-                        </div>
-                    );
-                })}
-            </div>
-            <div className="flex flex-col gap-3.5 items-center mt-auto">
-                {[Settings, HelpCircle].map((Icon, i) => (
-                    <div
-                        key={i}
-                        className="grid place-items-center"
-                        style={{ width: "42px", height: "42px", background: "#2E2C29", border: "2px solid #2E2C29", color: "#8B8781" }}
-                    >
-                        <Icon size={17} />
-                    </div>
-                ))}
-            </div>
-        </nav>
-    );
 }
 
 const MIX_PALETTE = ["#CFE6F2", "#F3D8D2", "#D7E8D8", "#E4E3EC", "#FFFDF8"];
@@ -314,8 +241,7 @@ export default function DashboardPage() {
     const githubOrg = process.env.NEXT_PUBLIC_GITHUB_ORG_OR_USER || "";
 
     return (
-        <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
-            <Sidebar />
+
 
             <main className="flex-1 min-w-0 flex flex-col gap-5" style={{ padding: "26px 30px 60px" }}>
                 <header className="flex items-end justify-between gap-6 flex-wrap">
@@ -424,6 +350,6 @@ export default function DashboardPage() {
                     />
                 </div>
             </main>
-        </div>
+
     );
 }

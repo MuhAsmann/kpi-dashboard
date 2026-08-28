@@ -1,12 +1,15 @@
 "use client";
 
+import { formatHour } from "@/lib/calendar-utils";
 import { DailyWorkEntry } from "@/types/daily-work";
 import { Clock, ExternalLink, GitPullRequestArrow, X, User as UserIcon, Tag, CheckCircle2, AlertCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 
 interface TimelineSectionProps {
     data: DailyWorkEntry[];
     loading: boolean;
+    selectedEntry: DailyWorkEntry | null;
+    setSelectedEntry: (entry: DailyWorkEntry | null) => void;
 }
 
 /** Group entries by hour (9 to 17 guaranteed, plus any extra hours in data) */
@@ -29,13 +32,9 @@ function groupByHour(entries: DailyWorkEntry[]): Map<number, DailyWorkEntry[]> {
     return new Map([...map.entries()].sort((a, b) => a[0] - b[0]));
 }
 
-function formatHour(hour: number): string {
-    const h = hour % 24;
-    const pad = h < 10 ? `0${h}` : `${h}`;
-    return `${pad}:00`;
-}
 
-function getStatusBadgeClass(status: string, isContinuous: boolean): string {
+
+export function getStatusBadgeClass(status: string, isContinuous: boolean): string {
     if (!isContinuous) return "badge badge-done";
     const lower = status.toLowerCase();
     if (lower.includes("progress") || lower.includes("review")) return "badge badge-in-progress";
@@ -43,9 +42,8 @@ function getStatusBadgeClass(status: string, isContinuous: boolean): string {
     return "badge badge-in-progress";
 }
 
-export default function TimelineSection({ data, loading }: TimelineSectionProps) {
+export default function TimelineSection({ data, loading, selectedEntry, setSelectedEntry }: TimelineSectionProps) {
     const grouped = useMemo(() => groupByHour(data), [data]);
-    const [selectedEntry, setSelectedEntry] = useState<DailyWorkEntry | null>(null);
 
     if (loading) {
         return (

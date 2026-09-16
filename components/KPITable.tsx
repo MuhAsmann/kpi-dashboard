@@ -7,6 +7,7 @@ import Image from "next/image";
 import { SortField } from "@/types/dashboard";
 import { useState, Fragment } from "react";
 import { format } from "date-fns";
+import TaskHistoryModal, { type KpiTask } from "@/components/TaskHistoryModal";
 
 interface KPITableProps {
     kpis: UserKPI[];
@@ -114,6 +115,7 @@ export default function KPITable({
     onSort,
 }: KPITableProps) {
     const [expandedUserId, setExpandedUserId] = useState<string | null>(null);
+    const [historyTask, setHistoryTask] = useState<KpiTask | null>(null);
 
     const toggleRow = (userId: string) => {
         setExpandedUserId(prev => prev === userId ? null : userId);
@@ -201,6 +203,7 @@ export default function KPITable({
                                                                 src={kpi.user.avatar_url}
                                                                 alt={kpi.user.github_login}
                                                                 fill
+                                                                sizes="34px"
                                                                 className="object-cover"
                                                             />
                                                         ) : (
@@ -346,6 +349,7 @@ export default function KPITable({
                                                                 {kpi.tasks.map(task => (
                                                                     <div
                                                                         key={task.id}
+                                                                        onClick={() => task.histories.length > 0 && setHistoryTask(task)}
                                                                         style={{
                                                                             background: "var(--card)",
                                                                             border: "2px solid var(--card-border)",
@@ -354,6 +358,7 @@ export default function KPITable({
                                                                             display: "flex",
                                                                             flexDirection: "column",
                                                                             gap: "9px",
+                                                                            cursor: task.histories.length > 0 ? "pointer" : "default",
                                                                         }}
                                                                     >
                                                                         <div className="flex justify-between items-start gap-3.5 flex-wrap">
@@ -361,6 +366,7 @@ export default function KPITable({
                                                                                 href={task.url || "#"}
                                                                                 target="_blank"
                                                                                 rel="noopener noreferrer"
+                                                                                onClick={(e) => e.stopPropagation()}
                                                                                 className="font-semibold text-sm hover:opacity-70 flex-1 pr-2 line-clamp-2"
                                                                                 style={{ color: "var(--text-primary)" }}
                                                                             >
@@ -433,8 +439,8 @@ export default function KPITable({
                                                                         </div>
 
                                                                         {task.histories && task.histories.length > 0 && (() => {
-                                                                            const pastChips = task.histories.slice(0, -1);
-                                                                            const currentAt = task.histories[task.histories.length - 1].changed_at;
+                                                                            const preview = task.histories.slice(0, 3);
+                                                                            const remaining = task.histories.length - preview.length;
                                                                             const chipStyle: React.CSSProperties = {
                                                                                 padding: "2px 7px",
                                                                                 background: "var(--background)",
@@ -451,7 +457,7 @@ export default function KPITable({
                                                                                     <span style={{ fontSize: "10.5px", letterSpacing: "0.5px", textTransform: "uppercase", color: "var(--text-muted)" }}>
                                                                                         History
                                                                                     </span>
-                                                                                    {pastChips.map((h, i) => (
+                                                                                    {preview.map((h, i) => (
                                                                                         <span key={i} className="flex items-center gap-2">
                                                                                             <span style={chipStyle}>
                                                                                                 {h.new_status}
@@ -459,15 +465,16 @@ export default function KPITable({
                                                                                                     {format(new Date(h.changed_at), "MMM d, h:mm a")}
                                                                                                 </span>
                                                                                             </span>
-                                                                                            <span style={{ color: "var(--dashed)" }}>→</span>
+                                                                                            {(i < preview.length - 1 || remaining > 0) && (
+                                                                                                <span style={{ color: "var(--dashed)" }}>→</span>
+                                                                                            )}
                                                                                         </span>
                                                                                     ))}
-                                                                                    <span style={{ ...chipStyle, background: task.is_done ? "var(--accent)" : "var(--card-alt)" }}>
-                                                                                        {task.status}
-                                                                                        <span style={{ color: "var(--text-muted)", fontSize: "10px" }}>
-                                                                                            {format(new Date(currentAt), "MMM d, h:mm a")}
+                                                                                    {remaining > 0 && (
+                                                                                        <span style={{ ...chipStyle, color: "var(--text-muted)" }}>
+                                                                                            +{remaining} more
                                                                                         </span>
-                                                                                    </span>
+                                                                                    )}
                                                                                 </div>
                                                                             );
                                                                         })()}
@@ -486,6 +493,7 @@ export default function KPITable({
                     </tbody>
                 </table>
             </div>
+            <TaskHistoryModal task={historyTask} onClose={() => setHistoryTask(null)} />
         </div>
     );
 }

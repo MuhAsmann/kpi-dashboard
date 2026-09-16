@@ -19,6 +19,9 @@ export interface CalendarSegment {
     status: string;
     start: number;
     end: number;
+    /** Same span as start/end, but the real (un-rounded) instants — for display, not grid layout. */
+    rawStart: number;
+    rawEnd: number;
 }
 
 export interface ComputedTask extends CalendarTask {
@@ -37,40 +40,48 @@ export function toDayMs(dateInput: string | Date): number {
  * Builds one segment per raw-status run for a task, from its `TaskHistory` transitions.
  * The first segment's status is the earliest known status (the first history row's
  * `old_status`, or the task's own current `status` if there's no history at all).
- * The last segment ends at `closed_at` (actual) if closed, else `end_date` (planned target)
- * if set, else `todayMs` (still open, no known end date).
+ * The last segment ends at `closed_at` (actual close) if set, else — if the task's current
+ * status maps to a "done" KPI bucket (`is_done`, computed server-side since raw status text
+ * alone can't tell us that) — the day it transitioned into that status, so a done task stops
+ * appearing on the calendar instead of re-rendering every day up to today. Otherwise it ends
+ * at `end_date` (planned target) if set, else `todayMs` (still open, no known end date).
  */
 export function buildSegments(task: CalendarTask, todayMs: number): CalendarSegment[] {
-    const startMs = toDayMs(task.start_date ?? task.created_at);
-    const finalEndMs = task.closed_at
-        ? toDayMs(task.closed_at)
-        : task.end_date
-            ? toDayMs(task.end_date)
-            : todayMs;
-
+    const startSource = task.start_date ?? task.created_at;
+    const startMs = toDayMs(startSource);
+    const rawStartMs = new Date(startSource).getTime();
     const history = [...task.histories].sort(
         (a, b) => new Date(a.changed_at).getTime() - new Date(b.changed_at).getTime()
     );
 
+    const finalEndSource = task.closed_at
+        ?? (task.is_done ? history[history.length - 1]?.changed_at ?? startSource : null)
+        ?? task.end_date
+        ?? null;
+    const finalEndMs = finalEndSource ? toDayMs(finalEndSource) : todayMs;
+    const rawFinalEndMs = finalEndSource ? new Date(finalEndSource).getTime() : todayMs;
+
     if (history.length === 0) {
-        return [{ status: task.status, start: startMs, end: Math.max(startMs, finalEndMs) }];
+        return [{ status: task.status, start: startMs, end: Math.max(startMs, finalEndMs), rawStart: rawStartMs, rawEnd: Math.max(rawStartMs, rawFinalEndMs) }];
     }
 
-    const points: { status: string; start: number }[] = [
-        { status: history[0].old_status ?? history[0].new_status, start: startMs },
-        ...history.map((h) => ({ status: h.new_status, start: toDayMs(h.changed_at) })),
+    const points: { status: string; start: number; rawStart: number }[] = [
+        { status: history[0].old_status ?? history[0].new_status, start: startMs, rawStart: rawStartMs },
+        ...history.map((h) => ({ status: h.new_status, start: toDayMs(h.changed_at), rawStart: new Date(h.changed_at).getTime() })),
     ];
 
     const segments: CalendarSegment[] = [];
     for (let i = 0; i < points.length; i++) {
         const segStart = i === 0 ? startMs : points[i].start;
+        const segRawStart = i === 0 ? rawStartMs : points[i].rawStart;
         const segEnd = i < points.length - 1 ? points[i + 1].start - DAY_MS : finalEndMs;
+        const segRawEnd = i < points.length - 1 ? points[i + 1].rawStart : rawFinalEndMs;
         if (segEnd >= segStart) {
-            segments.push({ status: points[i].status, start: segStart, end: segEnd });
+            segments.push({ status: points[i].status, start: segStart, end: segEnd, rawStart: segRawStart, rawEnd: segRawEnd });
         }
     }
     if (segments.length === 0) {
-        return [{ status: points[points.length - 1].status, start: finalEndMs, end: finalEndMs }];
+        return [{ status: points[points.length - 1].status, start: finalEndMs, end: finalEndMs, rawStart: rawFinalEndMs, rawEnd: rawFinalEndMs }];
     }
     return segments;
 }

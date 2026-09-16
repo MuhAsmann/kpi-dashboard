@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Space_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
+import Sidebar from "@/components/Sidebar";
 
 const spaceMono = Space_Mono({
   subsets: ["latin"],
@@ -29,7 +30,10 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${spaceMono.variable} ${ibmPlexSans.variable} antialiased`}>
-        {children}
+        <div className="flex min-h-screen" style={{ background: "var(--background)" }}>
+          <Sidebar />
+          {children}
+        </div>
       </body>
     </html>
   );

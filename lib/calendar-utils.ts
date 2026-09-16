@@ -347,3 +347,9 @@ export function statusOnDay(task: ComputedTask, dayMs: number): string {
     const seg = task.segments.find((s) => s.start <= dayMs && s.end >= dayMs);
     return seg ? seg.status : task.status;
 }
+
+export function formatHour(hour: number): string {
+    const h = hour % 24;
+    const pad = h < 10 ? `0${h}` : `${h}`;
+    return `${pad}:00`;
+}

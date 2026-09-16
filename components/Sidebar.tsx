@@ -1,5 +1,5 @@
 "use client"
-import { Calendar as CalendarIcon, HelpCircle, LayoutDashboard, Settings } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, HelpCircle, LayoutDashboard, Settings } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -8,6 +8,7 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS: { icon: typeof LayoutDashboard; label: string; href?: string }[] = [
     { icon: LayoutDashboard, label: "Dashboard", href: "/dashboard" },
     { icon: CalendarIcon, label: "Calendar", href: "/calendar" },
+    { icon: Clock, label: "Daily Timeline", href: "/daily-timeline" },
 ];
 
 

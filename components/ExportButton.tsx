@@ -12,7 +12,7 @@ export default function ExportButton({ filters }: ExportButtonProps) {
         const params = new URLSearchParams();
         if (filters.startDate) params.set("start_date", filters.startDate);
         if (filters.endDate) params.set("end_date", filters.endDate);
-        if (filters.repository) params.set("repository", filters.repository);
+        filters.repository.forEach((repository) => params.append("repository", repository));
 
         const downloadUrl = `/api/export?${params.toString()}`;
 

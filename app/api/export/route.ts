@@ -7,7 +7,7 @@ export async function GET(request: NextRequest) {
 
         const startDateStr = searchParams.get("start_date");
         const endDateStr = searchParams.get("end_date");
-        const repository = searchParams.get("repository");
+        const repositories = searchParams.getAll("repository");
         const project = searchParams.get("project");
 
         const where: Record<string, any> = {};
@@ -22,8 +22,8 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        if (repository) {
-            where.repository = repository;
+        if (repositories.length) {
+            where.repository = { in: repositories };
         }
 
         if (project) {

@@ -142,7 +142,7 @@ export default function DashboardPage() {
         return {
             startDate: toDateString(firstDay),
             endDate: toDateString(lastDay),
-            repository: "",
+            repository: [],
             project: "",
             sortBy: "completion_rate",
             sortOrder: "desc",
@@ -195,7 +195,7 @@ export default function DashboardPage() {
             const params = new URLSearchParams();
             if (filters.startDate) params.set("start_date", filters.startDate);
             if (filters.endDate) params.set("end_date", filters.endDate);
-            if (filters.repository) params.set("repository", filters.repository);
+            filters.repository.forEach((repository) => params.append("repository", repository));
             if (filters.project !== "") params.set("project", String(filters.project));
 
             const [kpiRes, summaryRes] = await Promise.all([

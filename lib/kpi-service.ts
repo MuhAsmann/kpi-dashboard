@@ -63,7 +63,7 @@ export interface UserKPI {
 export interface KPIFilters {
     startDate?: Date;
     endDate?: Date;
-    repository?: string;
+    repository?: string[];
     projectNumber?: number;
 }
 
@@ -236,8 +236,8 @@ function buildTaskFilter(filters?: KPIFilters): Prisma.TaskWhereInput {
         }
     }
 
-    if (filters.repository) {
-        where.repository = filters.repository;
+    if (filters.repository?.length) {
+        where.repository = { in: filters.repository };
     }
 
     if (filters.projectNumber) {

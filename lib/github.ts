@@ -73,6 +73,17 @@ function getHeaders() {
 }
 
 /**
+ * Smaller `items(first: ...)` page size for boards with lots of items, since
+ * each item's nested timelineItems/fieldValues/assignees/labels connections
+ * multiply the per-request complexity — see the comment at its call site.
+ */
+function pageSizeForTotal(total: number): number {
+  if (total > 2000) return 15;
+  if (total > 500) return 30;
+  return 100;
+}
+
+/**
  * Fetch GitHub Project V2 items using GraphQL API
  */
 export async function fetchGitHubProjectItems(
@@ -86,11 +97,12 @@ export async function fetchGitHubProjectItems(
       : `user(login: "${ownerLogin}")`;
 
   const query = `
-    query GetProjectItems($after: String) {
+    query GetProjectItems($after: String, $first: Int!) {
       ${ownerQuery} {
         projectV2(number: ${projectNumber}) {
           title
-          items(first: 100, after: $after) {
+          items(first: $first, after: $after) {
+            totalCount
             pageInfo {
               hasNextPage
               endCursor
@@ -229,9 +241,15 @@ export async function fetchGitHubProjectItems(
   let hasNextPage = true;
   let cursor: string | null = null;
   let projectTitle = "";
+  // Each item nests timelineItems/fieldValues/assignees/labels, so a page of
+  // items this size carries a lot of nested connections in one GraphQL call.
+  // GitHub's API can silently return truncated nested data (no top-level
+  // `errors`) once that gets too large, so boards with many items page
+  // through with a smaller `first` once we know how big they are.
+  let pageSize = 50;
 
   while (hasNextPage) {
-    const variables: Record<string, string | null> = { after: cursor };
+    const variables: Record<string, string | number | null> = { after: cursor, first: pageSize };
 
     const response = await fetch(GITHUB_GRAPHQL_URL, {
       method: "POST",
@@ -263,6 +281,10 @@ export async function fetchGitHubProjectItems(
 
     projectTitle = project.title;
     const items = project.items;
+
+    if (allItems.length === 0 && typeof items.totalCount === "number") {
+      pageSize = pageSizeForTotal(items.totalCount);
+    }
 
     allItems = [...allItems, ...(items.nodes || [])];
 

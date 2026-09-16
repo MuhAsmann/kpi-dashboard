@@ -34,6 +34,10 @@ export interface GitHubProjectItem {
         previousStatus?: string;
         status?: string;
       }>;
+      pageInfo?: {
+        hasNextPage: boolean;
+        endCursor: string | null;
+      };
     };
   } | null;
   fieldValues: {
@@ -130,6 +134,10 @@ export async function fetchGitHubProjectItems(
                         status
                       }
                     }
+                    pageInfo {
+                      hasNextPage
+                      endCursor
+                    }
                   }
                 }
                 ... on PullRequest {
@@ -165,6 +173,10 @@ export async function fetchGitHubProjectItems(
                         previousStatus
                         status
                       }
+                    }
+                    pageInfo {
+                      hasNextPage
+                      endCursor
                     }
                   }
                 }
@@ -258,10 +270,88 @@ export async function fetchGitHubProjectItems(
     cursor = items.pageInfo.endCursor;
   }
 
+  // Status-change history is capped at 20 per item above; fetch the rest for
+  // any item that hit that cap, so heavy-churn tickets don't lose history.
+  for (const item of allItems) {
+    const content = item.content;
+    let pageInfo = content?.timelineItems?.pageInfo;
+    while (content?.timelineItems && pageInfo?.hasNextPage) {
+      const more = await fetchMoreTimelineItems(content.id!, pageInfo.endCursor);
+      content.timelineItems.nodes.push(...more.nodes);
+      pageInfo = more.pageInfo;
+    }
+  }
+
   return {
     title: projectTitle,
     items: allItems,
   };
+}
+
+async function fetchMoreTimelineItems(
+  nodeId: string,
+  after: string | null
+): Promise<{
+  nodes: Array<{ __typename: string; createdAt?: string; previousStatus?: string; status?: string }>;
+  pageInfo?: { hasNextPage: boolean; endCursor: string | null };
+}> {
+  const query = `
+    query GetMoreTimelineItems($id: ID!, $after: String) {
+      node(id: $id) {
+        ... on Issue {
+          timelineItems(first: 100, after: $after, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemStatusChangedEvent {
+                createdAt
+                previousStatus
+                status
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+        ... on PullRequest {
+          timelineItems(first: 100, after: $after, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+            nodes {
+              __typename
+              ... on ProjectV2ItemStatusChangedEvent {
+                createdAt
+                previousStatus
+                status
+              }
+            }
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(GITHUB_GRAPHQL_URL, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ query, variables: { id: nodeId, after } }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub API error: ${response.status} - ${text}`);
+  }
+
+  const data = await response.json();
+  if (data.errors) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(data.errors, null, 2)}`);
+  }
+
+  const timelineItems = data.data?.node?.timelineItems;
+  return { nodes: timelineItems?.nodes || [], pageInfo: timelineItems?.pageInfo };
 }
 
 /**

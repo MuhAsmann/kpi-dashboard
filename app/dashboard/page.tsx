@@ -10,7 +10,8 @@ import UserChart from "@/components/UserChart";
 import { UserKPI } from "@/lib/kpi-service";
 import { PROJECTS } from "@/lib/projects";
 import { DashboardFilters, SortField } from "@/types/dashboard";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 
 interface DashboardSummary {
     total_tasks: number;
@@ -127,7 +128,10 @@ function DeliveryMix({ kpis, total }: { kpis: UserKPI[]; total: number }) {
     );
 }
 
-export default function DashboardPage() {
+function DashboardContent() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
     const [kpis, setKpis] = useState<UserKPI[]>([]);
     const [summary, setSummary] = useState<DashboardSummary | null>(null);
     const [repositories, setRepositories] = useState<string[]>([]);
@@ -149,7 +153,37 @@ export default function DashboardPage() {
         };
     };
 
-    const [filters, setFilters] = useState<DashboardFilters>(getDefaultFilters());
+    const [filters, setFilters] = useState<DashboardFilters>(() => {
+        const defaults = getDefaultFilters();
+        const query = new URLSearchParams(searchParams.toString());
+        const project = query.get("project");
+        const parsedProject = project ? Number.parseInt(project, 10) : NaN;
+
+        return {
+            ...defaults,
+            startDate: query.has("start_date") ? query.get("start_date") ?? "" : defaults.startDate,
+            endDate: query.has("end_date") ? query.get("end_date") ?? "" : defaults.endDate,
+            repository: query.getAll("repository"),
+            project: Number.isInteger(parsedProject) ? parsedProject : "",
+        };
+    });
+
+    useEffect(() => {
+        const params = new URLSearchParams(searchParams.toString());
+        params.delete("start_date");
+        params.delete("end_date");
+        params.delete("repository");
+        params.delete("project");
+        params.set("start_date", filters.startDate);
+        params.set("end_date", filters.endDate);
+        filters.repository.forEach((repository) => params.append("repository", repository));
+        if (filters.project !== "") params.set("project", String(filters.project));
+
+        const nextQuery = params.toString();
+        if (nextQuery !== searchParams.toString()) {
+            router.replace(`${pathname}?${nextQuery}`, { scroll: false });
+        }
+    }, [filters, pathname, router, searchParams]);
 
     const sortKPIs = useCallback(
         (data: UserKPI[], sortBy: SortField, sortOrder: "asc" | "desc"): UserKPI[] => {
@@ -351,5 +385,13 @@ export default function DashboardPage() {
                 </div>
             </main>
 
+    );
+}
+
+export default function DashboardPage() {
+    return (
+        <Suspense>
+            <DashboardContent />
+        </Suspense>
     );
 }

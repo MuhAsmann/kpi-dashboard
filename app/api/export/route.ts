@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getBucketLookup, lookupBucket } from "@/lib/status-mapping";
+import { computeStatusVisits, formatDuration, summarizeStatusVisits } from "@/lib/task-history";
 
 export async function GET(request: NextRequest) {
     try {
@@ -7,10 +10,10 @@ export async function GET(request: NextRequest) {
 
         const startDateStr = searchParams.get("start_date");
         const endDateStr = searchParams.get("end_date");
-        const repository = searchParams.get("repository");
+        const repositories = searchParams.getAll("repository");
         const project = searchParams.get("project");
 
-        const where: Record<string, any> = {};
+        const where: Prisma.TaskWhereInput = {};
 
         if (startDateStr || endDateStr) {
             where.created_at = {};
@@ -22,22 +25,26 @@ export async function GET(request: NextRequest) {
             }
         }
 
-        if (repository) {
-            where.repository = repository;
+        if (repositories.length) {
+            where.repository = { in: repositories };
         }
 
         if (project) {
             where.project_number = parseInt(project, 10);
         }
 
-        const tasks = await prisma.task.findMany({
-            where,
-            include: {
-                assignee: true,
-                labels: true,
-            },
-            orderBy: { created_at: "desc" },
-        });
+        const [tasks, bucketLookup] = await Promise.all([
+            prisma.task.findMany({
+                where,
+                include: {
+                    assignee: true,
+                    labels: true,
+                    histories: { orderBy: { changed_at: "asc" } },
+                },
+                orderBy: { created_at: "desc" },
+            }),
+            getBucketLookup(),
+        ]);
 
         // Generate CSV string
         const header = [
@@ -48,6 +55,7 @@ export async function GET(request: NextRequest) {
             "Repository",
             "Project Title",
             "Status",
+            "Time in Status",
             "Story Points",
             "Type",
             "Created At",
@@ -64,23 +72,33 @@ export async function GET(request: NextRequest) {
             return `"${escaped}"`;
         };
 
-        const rows = tasks.map(t => [
-            escapeCsv(t.github_issue_id),
-            escapeCsv(t.title),
-            escapeCsv(t.assignee?.name),
-            escapeCsv(t.assignee?.github_login),
-            escapeCsv(t.repository),
-            escapeCsv(t.project_title),
-            escapeCsv(t.status),
-            escapeCsv(t.story_points?.toString()),
-            escapeCsv(t.type),
-            escapeCsv(t.created_at?.toISOString()),
-            escapeCsv(t.start_date?.toISOString()),
-            escapeCsv(t.end_date?.toISOString()),
-            escapeCsv(t.closed_at?.toISOString()),
-            escapeCsv(t.labels.map(l => l.name).join(", ")),
-            escapeCsv(t.url)
-        ]);
+        const rows = tasks.map(t => {
+            const isDone = lookupBucket(bucketLookup, t.project_number, t.status)?.is_done === true;
+            const timeInStatus = summarizeStatusVisits(
+                computeStatusVisits(t.histories, t.closed_at, isDone),
+            )
+                .map(({ status, totalMs }) => `${status}: ${formatDuration(totalMs)}`)
+                .join("; ");
+
+            return [
+                escapeCsv(t.github_issue_id),
+                escapeCsv(t.title),
+                escapeCsv(t.assignee?.name),
+                escapeCsv(t.assignee?.github_login),
+                escapeCsv(t.repository),
+                escapeCsv(t.project_title),
+                escapeCsv(t.status),
+                escapeCsv(timeInStatus),
+                escapeCsv(t.story_points?.toString()),
+                escapeCsv(t.type),
+                escapeCsv(t.created_at?.toISOString()),
+                escapeCsv(t.start_date?.toISOString()),
+                escapeCsv(t.end_date?.toISOString()),
+                escapeCsv(t.closed_at?.toISOString()),
+                escapeCsv(t.labels.map(l => l.name).join(", ")),
+                escapeCsv(t.url),
+            ];
+        });
 
         const csvContent = [header.join(","), ...rows.map(row => row.join(","))].join("\n");
 

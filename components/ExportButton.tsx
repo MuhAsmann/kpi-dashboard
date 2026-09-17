@@ -8,21 +8,32 @@ interface ExportButtonProps {
 }
 
 export default function ExportButton({ filters }: ExportButtonProps) {
-    const handleExport = () => {
+    const handleExport = async () => {
         const params = new URLSearchParams();
         if (filters.startDate) params.set("start_date", filters.startDate);
         if (filters.endDate) params.set("end_date", filters.endDate);
-        if (filters.repository) params.set("repository", filters.repository);
+        filters.repository.forEach((repository) => params.append("repository", repository));
+        if (filters.project !== "") params.set("project", String(filters.project));
 
         const downloadUrl = `/api/export?${params.toString()}`;
+        const timestamp = new Date()
+            .toLocaleString("sv-SE", { hour12: false })
+            .replace(" ", "_")
+            .replace(/:/g, "-");
 
-        // Create an invisible anchor element and trigger download
+        const response = await fetch(downloadUrl);
+        if (!response.ok) {
+            throw new Error("Failed to export tasks");
+        }
+
+        const blobUrl = URL.createObjectURL(await response.blob());
         const a = document.createElement("a");
-        a.href = downloadUrl;
-        a.download = "tasks-export.csv";
+        a.href = blobUrl;
+        a.download = `tasks-export-${timestamp}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
     };
 
     return (

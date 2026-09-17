@@ -8,7 +8,7 @@ export type SortField =
 export interface DashboardFilters {
     startDate: string;
     endDate: string;
-    repository: string;
+    repository: string[];
     project: number | "";
     sortBy: SortField;
     sortOrder: "asc" | "desc";

@@ -2,6 +2,7 @@
 "use client";
 
 import {
+    ACCENT_TOKENS,
     CalendarTask,
     CalendarView,
     ComputedTask,
@@ -18,11 +19,16 @@ import {
     getWeekStart,
     navigateAnchor,
     packLanes,
+    segmentIndexOnDay,
     statusOnDay,
     uniqueOptions,
 } from "@/lib/calendar-utils";
 import { UserKPI } from "@/lib/kpi-service";
 import { PROJECTS } from "@/lib/projects";
+import { usePersistedState } from "@/lib/use-persisted-state";
+import MultiSelectDropdown from "@/components/MultiSelectDropdown";
+import SingleSelectDropdown from "@/components/SingleSelectDropdown";
+import TaskSearchBox from "@/components/TaskSearchBox";
 import { formatDistanceToNow } from "date-fns";
 import {
     X
@@ -34,12 +40,49 @@ interface CalendarSummary {
     last_sync: string | null;
 }
 
+interface CalendarFilters {
+    repository: string[];
+    assignee: string[];
+    label: string[];
+    status: string[];
+}
+
+const DEFAULT_CALENDAR_FILTERS: CalendarFilters = {
+    repository: [],
+    assignee: [],
+    label: [],
+    status: [],
+};
+
+function isCalendarFilters(value: unknown): value is CalendarFilters {
+    if (typeof value !== "object" || value === null) return false;
+    const v = value as Record<string, unknown>;
+    return (
+        Array.isArray(v.repository) &&
+        Array.isArray(v.assignee) &&
+        Array.isArray(v.label) &&
+        Array.isArray(v.status) &&
+        v.repository.every((x) => typeof x === "string") &&
+        v.assignee.every((x) => typeof x === "string") &&
+        v.label.every((x) => typeof x === "string") &&
+        v.status.every((x) => typeof x === "string")
+    );
+}
+
+function formatDateTime(ms: number): string {
+    return new Date(ms).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
+}
+
+function isProjectValue(value: unknown): value is number | "" {
+    return value === "" || typeof value === "number";
+}
+
 export default function CalendarPage() {
     const [kpis, setKpis] = useState<UserKPI[]>([]);
     const [summary, setSummary] = useState<CalendarSummary | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [project, setProject] = useState<number | "">("");
+    const [project, setProject, projectLoaded] = usePersistedState<number | "">("calendar-project", "", isProjectValue);
 
     const [colorMode, setColorMode] = useState<"status" | "bucket">("status");
     const [bucketProject, setBucketProject] = useState<StatusMappingProject | undefined>(undefined);
@@ -101,8 +144,9 @@ export default function CalendarPage() {
     }, [project]);
 
     useEffect(() => {
+        if (!projectLoaded) return;
         fetchData();
-    }, [fetchData]);
+    }, [fetchData, projectLoaded]);
 
     const tasks: CalendarTask[] = useMemo(
         () => kpis.flatMap((k) => k.tasks.map((t) => ({ ...t, assignee: k.user }))),
@@ -119,12 +163,54 @@ export default function CalendarPage() {
         [tasks, todayMs]
     );
 
-    const [filters, setFilters] = useState({ repository: "", assignee: "", label: "", status: "" });
+    // Per-task, de-collided segment colors: two DIFFERENT raw statuses can hash
+    // to the same accent color, which makes a status change invisible in the
+    // timeline. Only applies in "by status" mode — in "by bucket" mode, two
+    // consecutive segments sharing a color means they're genuinely the same
+    // bucket, which is correct to show identically.
+    const taskSegmentColors = useMemo(() => {
+        const map = new Map<string, string[]>();
+        computedTasks.forEach((t) => {
+            const colors: string[] = [];
+            t.segments.forEach((seg, i) => {
+                let color = resolveColor(seg.status).color;
+                if (colorMode === "status" && i > 0 && color === colors[i - 1]) {
+                    const startIdx = ACCENT_TOKENS.indexOf(color as (typeof ACCENT_TOKENS)[number]);
+                    for (let step = 1; step < ACCENT_TOKENS.length; step++) {
+                        const candidate = ACCENT_TOKENS[(startIdx + step) % ACCENT_TOKENS.length];
+                        if (candidate !== colors[i - 1]) {
+                            color = candidate;
+                            break;
+                        }
+                    }
+                }
+                colors.push(color);
+            });
+            map.set(t.id, colors);
+        });
+        return map;
+    }, [computedTasks, colorMode, resolveColor]);
+
+    const colorForSegment = useCallback(
+        (taskId: string, segIndex: number, fallbackStatus: string): string => {
+            const colors = taskSegmentColors.get(taskId);
+            if (colors && segIndex >= 0 && segIndex < colors.length) return colors[segIndex];
+            return resolveColor(fallbackStatus).color;
+        },
+        [taskSegmentColors, resolveColor]
+    );
+
+    const [filters, setFilters] = usePersistedState<CalendarFilters>(
+        "calendar-filters",
+        DEFAULT_CALENDAR_FILTERS,
+        isCalendarFilters
+    );
 
     const [view, setView] = useState<CalendarView>("month");
     const [anchorMs, setAnchorMs] = useState(todayMs);
     const [span, setSpan] = useState<"continuous" | "per-day">("continuous");
     const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+    const [hoveredDayMs, setHoveredDayMs] = useState<number | null>(null);
 
     const anchorDate = new Date(anchorMs);
     const weekStartMs = useMemo(() => getWeekStart(anchorMs), [anchorMs]);
@@ -155,25 +241,39 @@ export default function CalendarPage() {
         cursor: "pointer",
     });
 
-    const repoOptions = useMemo(() => uniqueOptions(computedTasks.map((t) => t.repository), "All repositories"), [computedTasks]);
+    const repoOptions = useMemo(() => uniqueOptions(computedTasks.map((t) => t.repository), "All repositories").slice(1), [computedTasks]);
     const assigneeOptions = useMemo(
-        () => uniqueOptions(computedTasks.map((t) => t.assignee.name ?? t.assignee.github_login), "All assignees"),
+        () => uniqueOptions(computedTasks.map((t) => t.assignee.name ?? t.assignee.github_login), "All assignees").slice(1),
         [computedTasks]
     );
     const labelOptions = useMemo(
-        () => uniqueOptions(computedTasks.flatMap((t) => t.labels.map((l) => l.name)), "All labels"),
+        () => uniqueOptions(computedTasks.flatMap((t) => t.labels.map((l) => l.name)), "All labels").slice(1),
         [computedTasks]
     );
-    const statusOptions = useMemo(() => uniqueOptions(computedTasks.map((t) => t.status), "All statuses"), [computedTasks]);
+    const statusOptions = useMemo(() => uniqueOptions(computedTasks.map((t) => t.status), "All statuses").slice(1), [computedTasks]);
+
+    const taskSearchOptions = useMemo(
+        () => computedTasks.map((t) => ({ id: t.id, title: t.title, repository: t.repository, status: t.status })),
+        [computedTasks]
+    );
+
+    const jumpToTask = useCallback(
+        (taskId: string) => {
+            const task = computedTasks.find((t) => t.id === taskId);
+            if (task) setAnchorMs(task.spanStart);
+            setSelectedTaskId(taskId);
+        },
+        [computedTasks]
+    );
 
     const filteredTasks = useMemo(
         () =>
             computedTasks.filter(
                 (t) =>
-                    (!filters.repository || t.repository === filters.repository) &&
-                    (!filters.assignee || (t.assignee.name ?? t.assignee.github_login) === filters.assignee) &&
-                    (!filters.label || t.labels.some((l) => l.name === filters.label)) &&
-                    (!filters.status || t.status === filters.status)
+                    (filters.repository.length === 0 || filters.repository.includes(t.repository ?? "")) &&
+                    (filters.assignee.length === 0 || filters.assignee.includes(t.assignee.name ?? t.assignee.github_login ?? "")) &&
+                    (filters.label.length === 0 || t.labels.some((l) => filters.label.includes(l.name))) &&
+                    (filters.status.length === 0 || filters.status.includes(t.status))
             ),
         [computedTasks, filters]
     );
@@ -199,7 +299,12 @@ export default function CalendarPage() {
         return () => window.removeEventListener("keydown", onKey);
     }, [selectedTaskId]);
 
-    const hasActiveFilters = !!(filters.repository || filters.assignee || filters.label || filters.status);
+    const hasActiveFilters = !!(
+        filters.repository.length ||
+        filters.assignee.length ||
+        filters.label.length ||
+        filters.status.length
+    );
 
     return (
         <main className="flex-1 min-w-0 flex flex-col gap-5" style={{ padding: "26px 30px 60px" }}>
@@ -237,34 +342,21 @@ export default function CalendarPage() {
                         >
                             Project
                         </label>
-                        <select
+                        <SingleSelectDropdown
                             id="calendar-project"
-                            value={project}
-                            onChange={(e) => {
-                                const next = e.target.value ? parseInt(e.target.value, 10) : "";
+                            value={project === "" ? "" : String(project)}
+                            onChange={(v) => {
+                                const next = v ? parseInt(v, 10) : "";
                                 setProject(next);
                                 if (next === "") setColorMode("status");
                             }}
                             title="Scopes calendar data to this project"
-                            style={{
-                                fontFamily: "var(--font-mono), monospace",
-                                fontWeight: 700,
-                                fontSize: "13px",
-                                padding: "9px 12px",
-                                border: "2px solid var(--card-border)",
-                                background: "var(--accent)",
-                                color: "var(--text-primary)",
-                                cursor: "pointer",
-                                minWidth: "150px",
-                            }}
-                        >
-                            <option value="">All projects</option>
-                            {PROJECTS.map((p) => (
-                                <option key={p.number} value={p.number}>
-                                    {p.label}
-                                </option>
-                            ))}
-                        </select>
+                            buttonStyle={{ fontWeight: 700, padding: "9px 12px", background: "var(--accent)" }}
+                            options={[
+                                { value: "", label: "All projects" },
+                                ...PROJECTS.map((p) => ({ value: String(p.number), label: p.label })),
+                            ]}
+                        />
                     </div>
                 </div>
                 <button
@@ -303,12 +395,27 @@ export default function CalendarPage() {
                                     padding: "14px 16px",
                                 }}
                             >
+                                <div className="flex flex-col gap-1.5">
+                                    <label
+                                        htmlFor="calendar-task-search"
+                                        style={{
+                                            fontFamily: "var(--font-mono), monospace",
+                                            fontSize: "10.5px",
+                                            letterSpacing: "1px",
+                                            textTransform: "uppercase",
+                                            color: "var(--text-muted)",
+                                        }}
+                                    >
+                                        Search task
+                                    </label>
+                                    <TaskSearchBox id="calendar-task-search" tasks={taskSearchOptions} onSelect={jumpToTask} />
+                                </div>
                                 {[
-                                    { key: "repository" as const, label: "Repository", options: repoOptions },
-                                    { key: "assignee" as const, label: "Assignee", options: assigneeOptions },
-                                    { key: "label" as const, label: "Label", options: labelOptions },
-                                    { key: "status" as const, label: "Status", options: statusOptions },
-                                ].map(({ key, label, options }) => (
+                                    { key: "repository" as const, label: "Repository", options: repoOptions, allLabel: "All repositories" },
+                                    { key: "assignee" as const, label: "Assignee", options: assigneeOptions, allLabel: "All assignees" },
+                                    { key: "label" as const, label: "Label", options: labelOptions, allLabel: "All labels" },
+                                    { key: "status" as const, label: "Status", options: statusOptions, allLabel: "All statuses" },
+                                ].map(({ key, label, options, allLabel }) => (
                                     <div key={key} className="flex flex-col gap-1.5">
                                         <label
                                             htmlFor={`calendar-filter-${key}`}
@@ -322,32 +429,18 @@ export default function CalendarPage() {
                                         >
                                             {label}
                                         </label>
-                                        <select
+                                        <MultiSelectDropdown
                                             id={`calendar-filter-${key}`}
-                                            value={filters[key]}
-                                            onChange={(e) => setFilters((prev) => ({ ...prev, [key]: e.target.value }))}
-                                            style={{
-                                                fontFamily: "var(--font-mono), monospace",
-                                                fontSize: "13px",
-                                                padding: "8px 10px",
-                                                border: "2px solid var(--card-border)",
-                                                background: "var(--background)",
-                                                color: "var(--text-primary)",
-                                                cursor: "pointer",
-                                                minWidth: "150px",
-                                            }}
-                                        >
-                                            {options.map((o) => (
-                                                <option key={o} value={o.startsWith("All ") ? "" : o}>
-                                                    {o}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            options={options}
+                                            selected={filters[key]}
+                                            allLabel={allLabel}
+                                            onChange={(values) => setFilters((prev) => ({ ...prev, [key]: values }))}
+                                        />
                                     </div>
                                 ))}
                                 {hasActiveFilters && (
                                     <button
-                                        onClick={() => setFilters({ repository: "", assignee: "", label: "", status: "" })}
+                                        onClick={() => setFilters(DEFAULT_CALENDAR_FILTERS)}
                                         className="neo-btn neo-btn-sm flex items-center gap-1.5"
                                         style={{ fontSize: "12px", padding: "9px 13px", background: "var(--accent-pink)", color: "var(--text-primary)" }}
                                     >
@@ -445,7 +538,30 @@ export default function CalendarPage() {
                                                     {week.days.map((day) => {
                                                         const dayTasks = span === "per-day" ? filteredTasks.filter((t) => t.spanStart <= day.dateMs && t.spanEnd >= day.dateMs) : [];
                                                         return (
-                                                            <div key={day.dateMs} style={{ borderLeft: "1.5px dashed var(--dashed)", background: day.isCurrentMonth ? "transparent" : "var(--card-alt)", overflow: "hidden" }}>
+                                                            <div
+                                                                key={day.dateMs}
+                                                                role="button"
+                                                                tabIndex={0}
+                                                                onClick={() => {
+                                                                    setView("day");
+                                                                    setAnchorMs(day.dateMs);
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === "Enter" || e.key === " ") {
+                                                                        e.preventDefault();
+                                                                        setView("day");
+                                                                        setAnchorMs(day.dateMs);
+                                                                    }
+                                                                }}
+                                                                onMouseEnter={() => setHoveredDayMs(day.dateMs)}
+                                                                onMouseLeave={() => setHoveredDayMs((prev) => (prev === day.dateMs ? null : prev))}
+                                                                style={{
+                                                                    borderLeft: "1.5px dashed var(--dashed)",
+                                                                    background: hoveredDayMs === day.dateMs ? "var(--card-alt)" : day.isCurrentMonth ? "transparent" : "var(--card-alt)",
+                                                                    overflow: "hidden",
+                                                                    cursor: "pointer",
+                                                                }}
+                                                            >
                                                                 <div className="flex items-center gap-1.5" style={{ padding: "7px 9px 0" }}>
                                                                     <span
                                                                         style={{
@@ -473,7 +589,10 @@ export default function CalendarPage() {
                                                                         {dayTasks.slice(0, 3).map((t) => (
                                                                             <button
                                                                                 key={t.id}
-                                                                                onClick={() => setSelectedTaskId(t.id)}
+                                                                                onClick={(e) => {
+                                                                                    e.stopPropagation();
+                                                                                    setSelectedTaskId(t.id);
+                                                                                }}
                                                                                 title={t.title}
                                                                                 style={{
                                                                                     fontFamily: "var(--font-mono), monospace",
@@ -481,7 +600,7 @@ export default function CalendarPage() {
                                                                                     textAlign: "left",
                                                                                     padding: "2px 6px",
                                                                                     border: "1.5px solid var(--card-border)",
-                                                                                    background: resolveColor(statusOnDay(t, day.dateMs)).color,
+                                                                                    background: colorForSegment(t.id, segmentIndexOnDay(t, day.dateMs), statusOnDay(t, day.dateMs)),
                                                                                     color: "var(--text-primary)",
                                                                                     whiteSpace: "nowrap",
                                                                                     overflow: "hidden",
@@ -518,7 +637,7 @@ export default function CalendarPage() {
                                                                         width: `calc(${(block.colSpan / 7) * 100}% - ${(block.openLeft ? 0 : 4) + (block.openRight ? 0 : 4)}px)`,
                                                                         top: `${34 + block.lane * 26}px`,
                                                                         height: "22px",
-                                                                        background: resolveColor(block.status).color,
+                                                                        background: colorForSegment(block.taskId, block.segIndex, block.status),
                                                                         border: "1.5px solid var(--card-border)",
                                                                         borderRight: block.terminal ? "4px solid var(--text-primary)" : "1.5px solid var(--card-border)",
                                                                         font: "700 11px/1 var(--font-mono), monospace",
@@ -618,7 +737,7 @@ export default function CalendarPage() {
                                                             width: `calc(${(block.colSpan / 7) * 100}% - ${(block.openLeft ? 0 : 4) + (block.openRight ? 0 : 4)}px)`,
                                                             top: `${14 + block.lane * 44}px`,
                                                             height: "38px",
-                                                            background: resolveColor(block.status).color,
+                                                            background: colorForSegment(block.taskId, block.segIndex, block.status),
                                                             border: "1.5px solid var(--card-border)",
                                                             borderRight: block.terminal ? "4px solid var(--text-primary)" : "1.5px solid var(--card-border)",
                                                             font: "700 12px/1 var(--font-mono), monospace",
@@ -716,9 +835,9 @@ export default function CalendarPage() {
                                 <dt style={{ color: "var(--text-muted)" }}>Assignee</dt>
                                 <dd style={{ margin: 0, fontWeight: 600 }}>{selectedTask.assignee.name ?? selectedTask.assignee.github_login}</dd>
                                 <dt style={{ color: "var(--text-muted)" }}>Started</dt>
-                                <dd style={{ margin: 0 }}>{new Date(selectedTask.spanStart).toLocaleDateString()}</dd>
+                                <dd style={{ margin: 0 }}>{formatDateTime(selectedTask.segments[0].rawStart)}</dd>
                                 <dt style={{ color: "var(--text-muted)" }}>{selectedTask.closed_at ? "Closed" : "Target"}</dt>
-                                <dd style={{ margin: 0 }}>{new Date(selectedTask.spanEnd).toLocaleDateString()}</dd>
+                                <dd style={{ margin: 0 }}>{formatDateTime(selectedTask.segments[selectedTask.segments.length - 1].rawEnd)}</dd>
                                 <dt style={{ color: "var(--text-muted)" }}>Duration</dt>
                                 <dd style={{ margin: 0 }}>
                                     {Math.round((selectedTask.spanEnd - selectedTask.spanStart) / DAY_MS) + 1} days
@@ -743,11 +862,11 @@ export default function CalendarPage() {
                                 <div className="flex flex-col gap-2.5" style={{ marginBottom: "16px" }}>
                                     {selectedTask.segments.map((seg, i) => (
                                         <div key={i} className="flex items-start gap-2.5">
-                                            <span style={{ width: "8px", height: "8px", borderRadius: "999px", background: resolveColor(seg.status).color, border: "1.5px solid var(--card-border)", marginTop: "4px", flexShrink: 0 }} />
+                                            <span style={{ width: "8px", height: "8px", borderRadius: "999px", background: colorForSegment(selectedTask.id, i, seg.status), border: "1.5px solid var(--card-border)", marginTop: "4px", flexShrink: 0 }} />
                                             <span className="flex flex-col">
                                                 <span style={{ fontSize: "13px", fontWeight: 600 }}>{resolveColor(seg.status).label}</span>
                                                 <span style={{ fontSize: "11px", color: "var(--text-muted)" }}>
-                                                    {new Date(seg.start).toLocaleDateString()} – {new Date(seg.end).toLocaleDateString()}
+                                                    {formatDateTime(seg.rawStart)} – {formatDateTime(seg.rawEnd)}
                                                 </span>
                                             </span>
                                         </div>

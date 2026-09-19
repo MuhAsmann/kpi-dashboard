@@ -96,13 +96,15 @@ export function computeTask(task: CalendarTask, todayMs: number): ComputedTask {
     };
 }
 
-/** This app's 5 existing accent tokens — not the design mockup's own palette. */
+/** This app's accent tokens — not the design mockup's own palette. */
 export const ACCENT_TOKENS = [
     "var(--accent)",
     "var(--accent-blue)",
     "var(--accent-pink)",
     "var(--accent-green)",
     "var(--accent-lavender)",
+    "var(--accent-peach)",
+    "var(--accent-teal)",
 ] as const;
 
 /** Deterministic hash so the same key (raw status text, or bucket id) always gets the same color. */
@@ -228,6 +230,7 @@ export function packLanes(
 export interface SegmentBlock {
     key: string;
     taskId: string;
+    segIndex: number;
     label: string;
     labelKind: "title" | "status" | "none";
     status: string;
@@ -275,6 +278,7 @@ export function buildSegmentBlocks(laned: LanedTask, weekStartMs: number): Segme
         blocks.push({
             key: `${task.id}-${weekStartMs}-${i}`,
             taskId: task.id,
+            segIndex: i,
             label,
             labelKind,
             status: seg.status,
@@ -346,6 +350,11 @@ export function getDayItems(anchorMs: number, tasks: ComputedTask[]): ComputedTa
 export function statusOnDay(task: ComputedTask, dayMs: number): string {
     const seg = task.segments.find((s) => s.start <= dayMs && s.end >= dayMs);
     return seg ? seg.status : task.status;
+}
+
+/** Index into `task.segments` covering `dayMs`, or -1 if none (falls back to `task.status`). */
+export function segmentIndexOnDay(task: ComputedTask, dayMs: number): number {
+    return task.segments.findIndex((s) => s.start <= dayMs && s.end >= dayMs);
 }
 
 export function formatHour(hour: number): string {

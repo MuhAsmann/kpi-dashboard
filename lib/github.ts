@@ -377,6 +377,59 @@ async function fetchMoreTimelineItems(
 }
 
 /**
+ * Fetch the board's own "Status" column options straight from its field
+ * definition, so a status shows up even if no task is currently sitting in
+ * it (and never gets lost once every task has moved on from it) — unlike
+ * deriving the list from tasks currently stored in the DB.
+ */
+export async function fetchProjectStatusOptions(
+  ownerLogin: string,
+  projectNumber: number,
+  ownerType: "user" | "organization" = "user"
+): Promise<string[]> {
+  const ownerQuery =
+    ownerType === "organization"
+      ? `organization(login: "${ownerLogin}")`
+      : `user(login: "${ownerLogin}")`;
+
+  const query = `
+    query GetStatusFieldOptions {
+      ${ownerQuery} {
+        projectV2(number: ${projectNumber}) {
+          field(name: "Status") {
+            ... on ProjectV2SingleSelectField {
+              options {
+                name
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const response = await fetch(GITHUB_GRAPHQL_URL, {
+    method: "POST",
+    headers: getHeaders(),
+    body: JSON.stringify({ query }),
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(`GitHub API error: ${response.status} - ${text}`);
+  }
+
+  const data = await response.json();
+  if (data.errors) {
+    throw new Error(`GraphQL errors: ${JSON.stringify(data.errors, null, 2)}`);
+  }
+
+  const owner = data.data?.[ownerType === "organization" ? "organization" : "user"];
+  const options = owner?.projectV2?.field?.options as Array<{ name: string }> | undefined;
+  return (options ?? []).map((o) => o.name);
+}
+
+/**
  * Parse status from GitHub Project field values
  */
 export function parseStatusFromFieldValues(

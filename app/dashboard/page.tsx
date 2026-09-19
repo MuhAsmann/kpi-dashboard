@@ -4,6 +4,7 @@ import ExportButton from "@/components/ExportButton";
 import FilterBar from "@/components/FilterBar";
 import KPITable from "@/components/KPITable";
 import StatusMappingModal from "@/components/StatusMappingModal";
+import SingleSelectDropdown from "@/components/SingleSelectDropdown";
 import SummaryCards from "@/components/SummaryCards";
 import SyncButton from "@/components/SyncButton";
 import UserChart from "@/components/UserChart";
@@ -24,6 +25,29 @@ interface DashboardSummary {
 }
 
 const MIX_PALETTE = ["#CFE6F2", "#F3D8D2", "#D7E8D8", "#E4E3EC", "#FFFDF8"];
+
+const SORT_FIELDS: SortField[] = [
+    "completion_rate",
+    "completed_tasks",
+    "total_tasks",
+    "avg_cycle_time_days",
+    "bugs_count",
+];
+
+function isDashboardFilters(value: unknown): value is DashboardFilters {
+    if (typeof value !== "object" || value === null) return false;
+    const v = value as Record<string, unknown>;
+    return (
+        typeof v.startDate === "string" &&
+        typeof v.endDate === "string" &&
+        Array.isArray(v.repository) &&
+        v.repository.every((x) => typeof x === "string") &&
+        (v.project === "" || typeof v.project === "number") &&
+        typeof v.sortBy === "string" &&
+        SORT_FIELDS.includes(v.sortBy as SortField) &&
+        (v.sortOrder === "asc" || v.sortOrder === "desc")
+    );
+}
 
 function DeliveryMix({ kpis, total }: { kpis: UserKPI[]; total: number }) {
     const mix = useMemo(() => {
@@ -153,21 +177,41 @@ function DashboardContent() {
         };
     };
 
+    // Filters read from the URL first (shareable/bookmarkable links, survives
+    // a page refresh), falling back to the last-used filters in localStorage
+    // when there's nothing in the URL (e.g. navigated here via a plain sidebar
+    // link, which has no query string) instead of resetting to defaults.
     const [filters, setFilters] = useState<DashboardFilters>(() => {
         const defaults = getDefaultFilters();
         const query = new URLSearchParams(searchParams.toString());
-        const project = query.get("project");
-        const parsedProject = project ? Number.parseInt(project, 10) : NaN;
+        const hasUrlFilters =
+            query.has("start_date") || query.has("end_date") || query.has("repository") || query.has("project");
 
-        return {
-            ...defaults,
-            startDate: query.has("start_date") ? query.get("start_date") ?? "" : defaults.startDate,
-            endDate: query.has("end_date") ? query.get("end_date") ?? "" : defaults.endDate,
-            repository: query.getAll("repository"),
-            project: Number.isInteger(parsedProject) ? parsedProject : "",
-        };
+        if (hasUrlFilters) {
+            const project = query.get("project");
+            const parsedProject = project ? Number.parseInt(project, 10) : NaN;
+            return {
+                ...defaults,
+                startDate: query.has("start_date") ? query.get("start_date") ?? "" : defaults.startDate,
+                endDate: query.has("end_date") ? query.get("end_date") ?? "" : defaults.endDate,
+                repository: query.getAll("repository"),
+                project: Number.isInteger(parsedProject) ? parsedProject : "",
+            };
+        }
+
+        try {
+            const raw = window.localStorage.getItem("dashboard-filters");
+            if (raw) {
+                const parsed: unknown = JSON.parse(raw);
+                if (isDashboardFilters(parsed)) return parsed;
+            }
+        } catch {
+            // localStorage unavailable — fall through to defaults.
+        }
+        return defaults;
     });
 
+    // Keep the URL in sync with the current filters (shareable/bookmarkable).
     useEffect(() => {
         const params = new URLSearchParams(searchParams.toString());
         params.delete("start_date");
@@ -184,6 +228,16 @@ function DashboardContent() {
             router.replace(`${pathname}?${nextQuery}`, { scroll: false });
         }
     }, [filters, pathname, router, searchParams]);
+
+    // Also persist so navigating away and back (which drops the URL query)
+    // still restores the last-used filters instead of resetting to defaults.
+    useEffect(() => {
+        try {
+            window.localStorage.setItem("dashboard-filters", JSON.stringify(filters));
+        } catch {
+            // localStorage unavailable (e.g. private browsing) — ignore.
+        }
+    }, [filters]);
 
     const sortKPIs = useCallback(
         (data: UserKPI[], sortBy: SortField, sortOrder: "asc" | "desc"): UserKPI[] => {
@@ -303,30 +357,17 @@ function DashboardContent() {
                             >
                                 Project
                             </label>
-                            <select
+                            <SingleSelectDropdown
                                 id="header-project"
-                                value={filters.project}
-                                onChange={(e) => handleFilterChange({ project: e.target.value ? parseInt(e.target.value, 10) : "" })}
+                                value={filters.project === "" ? "" : String(filters.project)}
+                                onChange={(v) => handleFilterChange({ project: v ? parseInt(v, 10) : "" })}
                                 title="Scopes filtering, status mapping, export, and sync to this project"
-                                style={{
-                                    fontFamily: "var(--font-mono), monospace",
-                                    fontWeight: 700,
-                                    fontSize: "13px",
-                                    padding: "9px 12px",
-                                    border: "2px solid var(--card-border)",
-                                    background: "var(--accent)",
-                                    color: "var(--text-primary)",
-                                    cursor: "pointer",
-                                    minWidth: "150px",
-                                }}
-                            >
-                                <option value="">All projects</option>
-                                {PROJECTS.map((p) => (
-                                    <option key={p.number} value={p.number}>
-                                        {p.label}
-                                    </option>
-                                ))}
-                            </select>
+                                buttonStyle={{ fontWeight: 700, padding: "9px 12px", background: "var(--accent)" }}
+                                options={[
+                                    { value: "", label: "All projects" },
+                                    ...PROJECTS.map((p) => ({ value: String(p.number), label: p.label })),
+                                ]}
+                            />
                         </div>
                     </div>
                     <div className="flex gap-3 items-center">

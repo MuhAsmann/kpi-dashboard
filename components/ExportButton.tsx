@@ -21,6 +21,10 @@ export default function ExportButton({ filters }: ExportButtonProps) {
             .replace(" ", "_")
             .replace(/:/g, "-");
 
+        // task-exports-{start_date}-{end_date}_{timestamp_local}
+        const safe = (s: string) => s.replace(/[^A-Za-z0-9_-]/g, "");
+        const range = `${safe(filters.startDate || "all")}-${safe(filters.endDate || "all")}`;
+
         const response = await fetch(downloadUrl);
         if (!response.ok) {
             throw new Error("Failed to export tasks");
@@ -29,7 +33,7 @@ export default function ExportButton({ filters }: ExportButtonProps) {
         const blobUrl = URL.createObjectURL(await response.blob());
         const a = document.createElement("a");
         a.href = blobUrl;
-        a.download = `tasks-export-${timestamp}.csv`;
+        a.download = `task-exports-${range}_${timestamp}.csv`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

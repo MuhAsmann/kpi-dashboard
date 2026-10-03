@@ -147,10 +147,16 @@ export async function getAllTasksWithRelations() {
 
 // ============ SYNC LOG REPOSITORY ============
 
-export async function createSyncLog() {
+export async function createSyncLog(data?: {
+    total_items?: number;
+    current_stage?: string;
+}) {
     return prisma.syncLog.create({
         data: {
             status: "RUNNING",
+            total_items: data?.total_items ?? 0,
+            processed_items: 0,
+            current_stage: data?.current_stage ?? "Starting…",
         },
     });
 }
@@ -158,19 +164,108 @@ export async function createSyncLog() {
 export async function updateSyncLog(
     id: string,
     data: {
-        status: "SUCCESS" | "FAILED";
+        status: "RUNNING" | "SUCCESS" | "FAILED" | "CANCELLED";
         message?: string;
         items_synced?: number;
+        total_items?: number;
+        processed_items?: number;
+        current_stage?: string | null;
         finished_at?: Date;
+    }
+) {
+    const { status, ...rest } = data;
+    return prisma.syncLog.update({
+        where: { id },
+        data: {
+            ...rest,
+            status,
+            // Only stamp finished_at once the sync leaves RUNNING.
+            finished_at:
+                status === "RUNNING" ? undefined : (data.finished_at ?? new Date()),
+        },
+    });
+}
+
+/** Live progress write during a sync (stays RUNNING). */
+export async function updateSyncProgress(
+    id: string,
+    data: {
+        total_items?: number;
+        processed_items?: number;
+        current_stage?: string;
     }
 ) {
     return prisma.syncLog.update({
         where: { id },
-        data: {
-            ...data,
-            finished_at: data.finished_at ?? new Date(),
-        },
+        data,
     });
+}
+
+export async function getRunningSyncLog() {
+    return prisma.syncLog.findFirst({
+        where: { status: "RUNNING" },
+        orderBy: { started_at: "desc" },
+    });
+}
+
+/**
+ * Batch lookup of already-stored statuses for one board, used by the
+ * skip-if-unchanged sync optimization. Chunked so very large boards don't
+ * blow up a single `IN (...)` query.
+ */
+export async function getTaskStatusMap(
+    projectNumber: number,
+    githubIssueIds: string[]
+): Promise<Map<string, string>> {
+    const map = new Map<string, string>();
+    const CHUNK = 1000;
+    for (let i = 0; i < githubIssueIds.length; i += CHUNK) {
+        const rows = await prisma.task.findMany({
+            where: {
+                project_number: projectNumber,
+                github_issue_id: { in: githubIssueIds.slice(i, i + CHUNK) },
+            },
+            select: { github_issue_id: true, status: true },
+        });
+        for (const r of rows) map.set(r.github_issue_id, r.status);
+    }
+    return map;
+}
+
+export async function getLatestSyncLog() {
+    return prisma.syncLog.findFirst({
+        orderBy: { started_at: "desc" },
+    });
+}
+
+/**
+ * Ask a RUNNING sync to stop. Only touches rows still RUNNING, so a sync
+ * that finished in the meantime keeps its terminal status — returns the
+ * number of rows flagged (0 = nothing to cancel).
+ */
+export async function requestSyncCancel(id: string): Promise<number> {
+    const result = await prisma.syncLog.updateMany({
+        where: { id, status: "RUNNING" },
+        data: { cancel_requested: true },
+    });
+    return result.count;
+}
+
+export async function isSyncCancelRequested(id: string): Promise<boolean> {
+    const row = await prisma.syncLog.findUnique({
+        where: { id },
+        select: { cancel_requested: true },
+    });
+    return row?.cancel_requested ?? false;
+}
+
+/** Current status of one sync row (used to avoid overwriting a forced outcome). */
+export async function getSyncLogStatus(id: string): Promise<string | null> {
+    const row = await prisma.syncLog.findUnique({
+        where: { id },
+        select: { status: true },
+    });
+    return row?.status ?? null;
 }
 
 export async function getRecentSyncLogs() {

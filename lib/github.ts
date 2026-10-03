@@ -59,6 +59,14 @@ export interface GitHubProjectData {
   items: GitHubProjectItem[];
 }
 
+/** Thrown when a running sync is cancelled by the user. */
+export class SyncCancelledError extends Error {
+  constructor() {
+    super("Sync cancelled");
+    this.name = "SyncCancelledError";
+  }
+}
+
 const GITHUB_GRAPHQL_URL = "https://api.github.com/graphql";
 
 function getHeaders() {
@@ -84,12 +92,19 @@ function pageSizeForTotal(total: number): number {
 }
 
 /**
- * Fetch GitHub Project V2 items using GraphQL API
+ * Fetch GitHub Project V2 items using GraphQL API.
+ *
+ * `onProgress(fetched, total)` is called after every page so callers can
+ * persist live progress (e.g. into sync_logs). `total` is null until the
+ * first page reveals `totalCount`. `shouldAbort` is polled between pages
+ * and throws SyncCancelledError when the user cancels the sync.
  */
 export async function fetchGitHubProjectItems(
   ownerLogin: string,
   projectNumber: number,
-  ownerType: "user" | "organization" = "user"
+  ownerType: "user" | "organization" = "user",
+  onProgress?: (fetched: number, total: number | null) => void,
+  shouldAbort?: () => Promise<boolean>
 ): Promise<GitHubProjectData> {
   const ownerQuery =
     ownerType === "organization"
@@ -249,6 +264,9 @@ export async function fetchGitHubProjectItems(
   let pageSize = 50;
 
   while (hasNextPage) {
+    if (shouldAbort && (await shouldAbort())) {
+      throw new SyncCancelledError();
+    }
     const variables: Record<string, string | number | null> = { after: cursor, first: pageSize };
 
     const response = await fetch(GITHUB_GRAPHQL_URL, {
@@ -287,6 +305,10 @@ export async function fetchGitHubProjectItems(
     }
 
     allItems = [...allItems, ...(items.nodes || [])];
+    onProgress?.(
+      allItems.length,
+      typeof items.totalCount === "number" ? items.totalCount : null
+    );
 
     hasNextPage = items.pageInfo.hasNextPage;
     cursor = items.pageInfo.endCursor;
@@ -295,6 +317,9 @@ export async function fetchGitHubProjectItems(
   // Status-change history is capped at 20 per item above; fetch the rest for
   // any item that hit that cap, so heavy-churn tickets don't lose history.
   for (const item of allItems) {
+    if (shouldAbort && (await shouldAbort())) {
+      throw new SyncCancelledError();
+    }
     const content = item.content;
     let pageInfo = content?.timelineItems?.pageInfo;
     while (content?.timelineItems && pageInfo?.hasNextPage) {

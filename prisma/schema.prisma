@@ -91,12 +91,16 @@ model StatusMapping {
 }
 
 model SyncLog {
-  id           String     @id @default(cuid())
-  started_at   DateTime   @default(now())
-  finished_at  DateTime?
-  status       SyncStatus @default(RUNNING)
-  message      String?
-  items_synced Int        @default(0)
+  id               String     @id @default(cuid())
+  started_at       DateTime   @default(now())
+  finished_at      DateTime?
+  status           SyncStatus @default(RUNNING)
+  message          String?
+  items_synced     Int        @default(0)
+  current_stage    String?
+  processed_items  Int        @default(0)
+  total_items      Int        @default(0)
+  cancel_requested Boolean    @default(false)
 
   @@map("sync_logs")
 }
@@ -105,4 +109,5 @@ enum SyncStatus {
   RUNNING
   SUCCESS
   FAILED
+  CANCELLED
 }

@@ -67,3 +67,20 @@ export function formatDuration(ms: number): string {
     if (hours > 0) return `${hours}h ${minutes}m`;
     return `${minutes}m`;
 }
+
+/**
+ * Detailed chronological timeline for CSV export, mirroring the Timeline
+ * section in TaskHistoryModal: one entry per status visit —
+ * "YYYY-MM-DD HH:mm:ss -> <status> (<duration>)", one per line.
+ * Newlines are safe inside the quoted CSV cell. Empty when no visits.
+ */
+export function formatStatusTimeline(visits: StatusVisit[]): string {
+    return visits
+        .map((v) => `${formatTimelineTimestamp(v.changedAt)} -> ${v.status} (${formatDuration(v.durationMs)})`)
+        .join("\n");
+}
+
+/** "YYYY-MM-DD HH:mm:ss" in UTC (avoids raw ISO with T/ms/Z). */
+export function formatTimelineTimestamp(input: Date | string): string {
+    return new Date(input).toISOString().slice(0, 19).replace("T", " ");
+}

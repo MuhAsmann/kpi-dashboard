@@ -18,7 +18,7 @@ export interface Metrics {
   avg_cycle_time_days: any
   active_tasks: number
   unmapped_tasks: number
-  bugs_count: number
+  reopened_tasks: number
   overdue_tasks: number
   total_story_points: number
   tasks_without_sp: number
@@ -39,7 +39,8 @@ export interface Task {
   type: string
   is_done: boolean
   is_overdue: boolean
-  bug_count: number
+  done_at?: string
+  reopen_count: number
   story_points?: number
   labels: Label[]
   histories: History[]

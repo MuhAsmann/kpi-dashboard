@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { buildTaskFilter, getTaskCompletion, isTaskInPeriod, KPIFilters } from "@/lib/kpi-service";
 import { getBucketLookup, lookupBucket } from "@/lib/status-mapping";
 import { computeStatusVisits, formatDuration, summarizeStatusVisits } from "@/lib/task-history";
 
@@ -13,27 +13,15 @@ export async function GET(request: NextRequest) {
         const repositories = searchParams.getAll("repository");
         const project = searchParams.get("project");
 
-        const where: Prisma.TaskWhereInput = {};
+        const filters: KPIFilters = {};
+        if (startDateStr) filters.startDate = new Date(startDateStr);
+        if (endDateStr) filters.endDate = new Date(endDateStr);
+        if (repositories.length) filters.repository = repositories;
+        if (project) filters.projectNumber = parseInt(project, 10);
 
-        if (startDateStr || endDateStr) {
-            where.created_at = {};
-            if (startDateStr) {
-                where.created_at.gte = new Date(startDateStr);
-            }
-            if (endDateStr) {
-                where.created_at.lte = new Date(endDateStr);
-            }
-        }
+        const where = buildTaskFilter(filters);
 
-        if (repositories.length) {
-            where.repository = { in: repositories };
-        }
-
-        if (project) {
-            where.project_number = parseInt(project, 10);
-        }
-
-        const [tasks, bucketLookup] = await Promise.all([
+        const [allTasks, bucketLookup] = await Promise.all([
             prisma.task.findMany({
                 where,
                 include: {
@@ -45,6 +33,9 @@ export async function GET(request: NextRequest) {
             }),
             getBucketLookup(),
         ]);
+
+        // Same period rule as the dashboard: finished in range, or still open.
+        const tasks = allTasks.filter((t) => isTaskInPeriod(getTaskCompletion(t, bucketLookup), filters));
 
         // Generate CSV string
         const header = [

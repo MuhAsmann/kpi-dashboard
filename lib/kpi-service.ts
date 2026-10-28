@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { Task, User, TaskLabel, TaskHistory, Prisma } from "@prisma/client";
-import { differenceInDays } from "date-fns";
+import { addDays, differenceInDays } from "date-fns";
 import { getBucketLookup, lookupBucket } from "@/lib/status-mapping";
 import { KpiBucketInfo } from "@/lib/kpi-buckets";
 
@@ -27,7 +27,8 @@ export interface UserKPI {
         avg_cycle_time_days: number | null;
         active_tasks: number;
         unmapped_tasks: number;
-        bugs_count: number;
+        // Tasks moved out of a done status back into a not-done one (rework).
+        reopened_tasks: number;
         overdue_tasks: number;
         total_story_points: number;
         tasks_without_sp: number;
@@ -49,7 +50,8 @@ export interface UserKPI {
         type: string | null;
         is_done: boolean;
         is_overdue: boolean;
-        bug_count: number;
+        done_at: Date | null;
+        reopen_count: number;
         story_points: number | null;
         labels: { name: string; color: string | null }[];
         histories: {
@@ -65,6 +67,64 @@ export interface KPIFilters {
     endDate?: Date;
     repository?: string[];
     projectNumber?: number;
+}
+
+interface TaskCompletion {
+    done: boolean;
+    // When the task last entered a done status; null while it's not done.
+    doneAt: Date | null;
+    reopenCount: number;
+}
+
+type CompletionSource = Pick<Task, "project_number" | "status" | "created_at" | "closed_at"> & {
+    histories: Pick<TaskHistory, "old_status" | "new_status" | "changed_at">[];
+};
+
+/**
+ * Walks a task's status history (oldest first) using the project's bucket
+ * mapping. A move from a done status to a mapped not-done status counts as a
+ * reopen; unmapped statuses are skipped so a missing mapping never looks like
+ * rework. A done task with no recorded move into done falls back to
+ * closed_at, then created_at.
+ */
+export function getTaskCompletion(
+    task: CompletionSource,
+    bucketLookup: Map<string, KpiBucketInfo>
+): TaskCompletion {
+    const isDoneStatus = (status: string) =>
+        lookupBucket(bucketLookup, task.project_number, status)?.is_done ?? null;
+
+    let doneSince: Date | null = null;
+    let reopenCount = 0;
+    for (const h of task.histories) {
+        const done = isDoneStatus(h.new_status);
+        if (done === null) continue;
+        if (done) {
+            doneSince ??= new Date(h.changed_at);
+        } else {
+            if (doneSince) reopenCount++;
+            doneSince = null;
+        }
+    }
+
+    const done = isDoneStatus(task.status) === true;
+    return {
+        done,
+        doneAt: done ? doneSince ?? task.closed_at ?? task.created_at : null,
+        reopenCount,
+    };
+}
+
+/**
+ * A task belongs to the period if it was finished inside it, or if it's still
+ * open (current work, as long as it existed by the end of the period). The
+ * end date is inclusive of the whole day.
+ */
+export function isTaskInPeriod(completion: TaskCompletion, filters?: KPIFilters): boolean {
+    if (!completion.done || !completion.doneAt) return true;
+    if (filters?.startDate && completion.doneAt < filters.startDate) return false;
+    if (filters?.endDate && completion.doneAt >= addDays(filters.endDate, 1)) return false;
+    return true;
 }
 
 function isTaskOverdue(task: TaskWithRelations, done: boolean, now: Date): boolean {
@@ -99,10 +159,15 @@ export async function calculateAllUserKPIs(
     })) as UserWithTasks[];
 
     const kpis: UserKPI[] = users
-        .filter((user) => user.tasks.length > 0)
         .map((user) => {
-            const tasks = user.tasks;
-            const isDone = (t: TaskWithRelations) => bucketOf(t)?.is_done === true;
+            const completions = new Map(user.tasks.map((t) => [t.id, getTaskCompletion(t, bucketLookup)]));
+            const completionOf = (t: TaskWithRelations) => completions.get(t.id)!;
+            const tasks = user.tasks.filter((t) => isTaskInPeriod(completionOf(t), filters));
+            const isDone = (t: TaskWithRelations) => completionOf(t).done;
+            return { user, tasks, completionOf, isDone };
+        })
+        .filter(({ tasks }) => tasks.length > 0)
+        .map(({ user, tasks, completionOf, isDone }) => {
 
             const totalTasks = tasks.length;
             const completedTasks = tasks.filter(isDone).length;
@@ -125,29 +190,16 @@ export async function calculateAllUserKPIs(
 
             const overdueTasks = tasks.filter((t) => isTaskOverdue(t, isDone(t), now)).length;
 
-            // Bugs generated: a PR opened in the same repo after a task was marked done
-            // is treated as a follow-up fix for that task.
-            let bugsCount = 0;
-            const issuesDone = tasks.filter((t) => t.type === "Issue" && isDone(t) && t.closed_at);
-            const prs = tasks.filter((t) => t.type === "PullRequest");
+            const reopenedTasks = tasks.filter((t) => completionOf(t).reopenCount > 0).length;
 
-            issuesDone.forEach((issue) => {
-                const baseDate = issue.end_date && issue.end_date > issue.closed_at! ? issue.end_date : issue.closed_at!;
-                const hasBug = prs.some((pr) =>
-                    pr.repository === issue.repository &&
-                    new Date(pr.created_at) > new Date(baseDate)
-                );
-                if (hasBug) bugsCount++;
-            });
-
-            // Average cycle time: only for done tasks with a closed_at
-            const completedWithDates = tasks.filter((t) => isDone(t) && t.closed_at);
+            // Average cycle time: start (or creation) until the task reached done
+            const completedWithDates = tasks.filter(isDone);
 
             let avgCycleTimeDays: number | null = null;
             if (completedWithDates.length > 0) {
                 const totalDays = completedWithDates.reduce((sum, task) => {
                     const start = task.start_date ? new Date(task.start_date) : new Date(task.created_at);
-                    const end = new Date(task.closed_at!);
+                    const end = completionOf(task).doneAt!;
                     const days = differenceInDays(end, start);
                     return sum + Math.max(0, days);
                 }, 0);
@@ -169,7 +221,7 @@ export async function calculateAllUserKPIs(
                     avg_cycle_time_days: avgCycleTimeDays,
                     active_tasks: activeTasks,
                     unmapped_tasks: unmappedTasks,
-                    bugs_count: bugsCount,
+                    reopened_tasks: reopenedTasks,
                     overdue_tasks: overdueTasks,
                     total_story_points: tasks.reduce((sum, t) => sum + (t.story_points ?? 0), 0),
                     tasks_without_sp: tasks.filter((t) => t.story_points == null).length,
@@ -177,15 +229,7 @@ export async function calculateAllUserKPIs(
                 },
                 tasks: tasks
                     .map((t) => {
-                        const done = isDone(t);
-                        let issueBugCount = 0;
-                        if (t.type === "Issue" && done && t.closed_at) {
-                            const baseDate = t.end_date && t.end_date > t.closed_at! ? t.end_date : t.closed_at!;
-                            issueBugCount = prs.filter((pr) =>
-                                pr.repository === t.repository &&
-                                new Date(pr.created_at) > new Date(baseDate)
-                            ).length;
-                        }
+                        const { done, doneAt, reopenCount } = completionOf(t);
 
                         return {
                             id: t.id,
@@ -201,7 +245,8 @@ export async function calculateAllUserKPIs(
                             type: t.type,
                             is_done: done,
                             is_overdue: isTaskOverdue(t, done, now),
-                            bug_count: issueBugCount,
+                            done_at: doneAt,
+                            reopen_count: reopenCount,
                             story_points: t.story_points ?? null,
                             labels: t.labels.map((l) => ({ name: l.name, color: l.color })),
                             histories: t.histories.map((h) => ({
@@ -219,21 +264,17 @@ export async function calculateAllUserKPIs(
 }
 
 /**
- * Build Prisma where clause for task filtering
+ * Build Prisma where clause for task filtering. The date range itself depends
+ * on when a task reached done (from its history), so it's applied afterwards
+ * with isTaskInPeriod — here we only drop tasks created after the period.
  */
-function buildTaskFilter(filters?: KPIFilters): Prisma.TaskWhereInput {
+export function buildTaskFilter(filters?: KPIFilters): Prisma.TaskWhereInput {
     if (!filters) return {};
 
     const where: Prisma.TaskWhereInput = {};
 
-    if (filters.startDate || filters.endDate) {
-        where.created_at = {};
-        if (filters.startDate) {
-            (where.created_at as Prisma.DateTimeFilter).gte = filters.startDate;
-        }
-        if (filters.endDate) {
-            (where.created_at as Prisma.DateTimeFilter).lte = filters.endDate;
-        }
+    if (filters.endDate) {
+        where.created_at = { lt: addDays(filters.endDate, 1) };
     }
 
     if (filters.repository?.length) {
@@ -287,17 +328,30 @@ export async function getDashboardSummary(filters?: KPIFilters) {
     const taskWhere = buildTaskFilter(filters);
     const bucketLookup = await getBucketLookup();
 
-    const [tasks, activeUsers, lastSync] = await Promise.all([
+    const [allTasks, lastSync] = await Promise.all([
         prisma.task.findMany({
             where: taskWhere,
-            select: { project_number: true, status: true, story_points: true },
+            select: {
+                project_number: true,
+                status: true,
+                story_points: true,
+                created_at: true,
+                closed_at: true,
+                assignee_id: true,
+                histories: {
+                    select: { old_status: true, new_status: true, changed_at: true },
+                    orderBy: { changed_at: "asc" },
+                },
+            },
         }),
-        prisma.user.count({ where: { tasks: { some: taskWhere } } }),
         prisma.syncLog.findFirst({
             where: { status: "SUCCESS" },
             orderBy: { finished_at: "desc" },
         }),
     ]);
+
+    const tasks = allTasks.filter((t) => isTaskInPeriod(getTaskCompletion(t, bucketLookup), filters));
+    const activeUsers = new Set(tasks.map((t) => t.assignee_id).filter((id) => id !== null)).size;
 
     const totalTasks = tasks.length;
     const completedTasks = tasks.filter(

@@ -106,7 +106,7 @@ export default function FilterBar({
             }}
         >
             <div className="flex flex-col gap-1.5">
-                <label htmlFor="filter-start-date" style={labelStyle}>From</label>
+                <label htmlFor="filter-start-date" style={labelStyle} title="Tasks finished in this range, plus all still-open work">Done from</label>
                 <input
                     id="filter-start-date"
                     type="date"
@@ -117,7 +117,7 @@ export default function FilterBar({
             </div>
 
             <div className="flex flex-col gap-1.5">
-                <label htmlFor="filter-end-date" style={labelStyle}>To</label>
+                <label htmlFor="filter-end-date" style={labelStyle} title="Tasks finished in this range, plus all still-open work">Done to</label>
                 <input
                     id="filter-end-date"
                     type="date"

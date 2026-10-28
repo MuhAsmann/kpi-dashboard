@@ -3,7 +3,7 @@ export type SortField =
     | "completed_tasks"
     | "total_tasks"
     | "avg_cycle_time_days"
-    | "bugs_count";
+    | "reopened_tasks";
 
 export interface DashboardFilters {
     startDate: string;

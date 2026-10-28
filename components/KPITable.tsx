@@ -102,7 +102,7 @@ const columns: Array<{
         { key: "completed_tasks", label: "Done", sortable: true },
         { key: "completion_rate", label: "Rate", sortable: true },
         { key: "avg_cycle_time_days", label: "Cycle", sortable: true },
-        { key: "bugs_count", label: "Bugs", sortable: true },
+        { key: "reopened_tasks", label: "Reopened", sortable: true },
         { key: null, label: "Points" },
         { key: null, label: "Active work" },
     ];
@@ -263,19 +263,19 @@ export default function KPITable({
                                                 )}
                                             </td>
 
-                                            {/* Bugs */}
+                                            {/* Reopened */}
                                             <td className="text-center">
                                                 <span
                                                     style={{
                                                         fontFamily: "var(--font-mono), monospace",
                                                         fontSize: "12px",
                                                         padding: "3px 8px",
-                                                        background: kpi.metrics.bugs_count > 0 ? "var(--accent-pink)" : "var(--card-alt)",
+                                                        background: kpi.metrics.reopened_tasks > 0 ? "var(--accent-pink)" : "var(--card-alt)",
                                                         border: "1.5px solid var(--card-border)",
                                                         color: "var(--text-primary)",
                                                     }}
                                                 >
-                                                    {kpi.metrics.bugs_count}
+                                                    {kpi.metrics.reopened_tasks}
                                                 </span>
                                             </td>
 
@@ -393,9 +393,9 @@ export default function KPITable({
                                                                                         overdue
                                                                                     </span>
                                                                                 )}
-                                                                                {task.bug_count > 0 && (
-                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 7px", fontSize: "10.5px" }}>
-                                                                                        🐞 {task.bug_count} bug{task.bug_count > 1 ? 's' : ''}
+                                                                                {task.reopen_count > 0 && (
+                                                                                    <span className="badge badge-cancelled" style={{ padding: "2px 7px", fontSize: "10.5px" }} title="Moved back out of a done status">
+                                                                                        reopened{task.reopen_count > 1 ? ` ${task.reopen_count}×` : ""}
                                                                                     </span>
                                                                                 )}
                                                                                 <span className={`badge shrink-0 ${bucketBadgeClass(task.bucket)}`}>

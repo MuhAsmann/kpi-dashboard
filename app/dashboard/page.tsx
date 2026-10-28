@@ -31,7 +31,7 @@ const SORT_FIELDS: SortField[] = [
     "completed_tasks",
     "total_tasks",
     "avg_cycle_time_days",
-    "bugs_count",
+    "reopened_tasks",
 ];
 
 function isDashboardFilters(value: unknown): value is DashboardFilters {
@@ -262,9 +262,9 @@ function DashboardContent() {
                         aVal = a.metrics.avg_cycle_time_days ?? 9999;
                         bVal = b.metrics.avg_cycle_time_days ?? 9999;
                         break;
-                    case "bugs_count":
-                        aVal = a.metrics.bugs_count;
-                        bVal = b.metrics.bugs_count;
+                    case "reopened_tasks":
+                        aVal = a.metrics.reopened_tasks;
+                        bVal = b.metrics.reopened_tasks;
                         break;
                     default:
                         aVal = a.metrics.completion_rate;

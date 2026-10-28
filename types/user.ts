@@ -16,6 +16,7 @@ export interface Metrics {
   completed_tasks: number
   completion_rate: number
   avg_cycle_time_days: any
+  median_active_days: number | null
   active_tasks: number
   unmapped_tasks: number
   reopened_tasks: number
@@ -41,6 +42,7 @@ export interface Task {
   is_overdue: boolean
   done_at?: string
   reopen_count: number
+  active_ms: number | null
   story_points?: number
   labels: Label[]
   histories: History[]

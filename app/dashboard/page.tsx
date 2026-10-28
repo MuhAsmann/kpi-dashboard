@@ -31,6 +31,7 @@ const SORT_FIELDS: SortField[] = [
     "completed_tasks",
     "total_tasks",
     "avg_cycle_time_days",
+    "median_active_days",
     "reopened_tasks",
 ];
 
@@ -261,6 +262,10 @@ function DashboardContent() {
                     case "avg_cycle_time_days":
                         aVal = a.metrics.avg_cycle_time_days ?? 9999;
                         bVal = b.metrics.avg_cycle_time_days ?? 9999;
+                        break;
+                    case "median_active_days":
+                        aVal = a.metrics.median_active_days ?? 9999;
+                        bVal = b.metrics.median_active_days ?? 9999;
                         break;
                     case "reopened_tasks":
                         aVal = a.metrics.reopened_tasks;

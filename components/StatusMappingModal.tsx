@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { X, Lock, Plus } from "lucide-react";
-import { KpiBucketInfo } from "@/lib/kpi-buckets";
+import { BUCKET_CATEGORIES, BUCKET_CATEGORY_LABELS, KpiBucketInfo } from "@/lib/kpi-buckets";
 import SingleSelectDropdown from "@/components/SingleSelectDropdown";
 
 interface ProjectData {
@@ -83,6 +83,25 @@ export default function StatusMappingModal({ open, onClose, onSaved, projectNumb
             prev.map((p) => (p.number !== projNumber ? p : { ...p, buckets: [...p.buckets, bucket] }))
         );
         setNewBucketLabel((prev) => ({ ...prev, [projNumber]: "" }));
+    };
+
+    const handleCategoryChange = async (projNumber: number, bucketId: string, category: string) => {
+        const res = await fetch("/api/status-mapping/buckets", {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ bucket_id: bucketId, category }),
+        });
+        if (!res.ok) return;
+        const { bucket } = await res.json();
+
+        setProjects((prev) =>
+            prev.map((p) =>
+                p.number !== projNumber
+                    ? p
+                    : { ...p, buckets: p.buckets.map((b) => (b.id === bucketId ? bucket : b)) }
+            )
+        );
+        onSaved();
     };
 
     const handleDeleteBucket = async (projNumber: number, bucketId: string) => {
@@ -196,6 +215,28 @@ export default function StatusMappingModal({ open, onClose, onSaved, projectNumb
                                     >
                                         {b.is_done && <Lock size={10} />}
                                         {b.label}
+                                        {!b.is_done && (
+                                            <select
+                                                value={b.category}
+                                                onChange={(e) => handleCategoryChange(p.number, b.id, e.target.value)}
+                                                title="Type: only Active time counts toward engineering time"
+                                                aria-label={`${b.label} type`}
+                                                className="cursor-pointer"
+                                                style={{
+                                                    fontFamily: "inherit",
+                                                    fontSize: "10.5px",
+                                                    border: "1px solid var(--card-border)",
+                                                    background: "var(--background)",
+                                                    padding: "0 2px",
+                                                }}
+                                            >
+                                                {BUCKET_CATEGORIES.filter((c) => c !== "done").map((c) => (
+                                                    <option key={c} value={c}>
+                                                        {BUCKET_CATEGORY_LABELS[c]}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        )}
                                         {!b.is_done && (
                                             <button
                                                 onClick={() => handleDeleteBucket(p.number, b.id)}

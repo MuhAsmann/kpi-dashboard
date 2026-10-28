@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { KpiBucketInfo } from "@/lib/kpi-buckets";
+import { BucketCategory, KpiBucketInfo } from "@/lib/kpi-buckets";
 
 export type { KpiBucketInfo } from "@/lib/kpi-buckets";
 
@@ -17,7 +17,7 @@ export async function getProjectBuckets(projectNumber: number): Promise<KpiBucke
 
     if (buckets.length === 0) {
         const done = await prisma.projectBucket.create({
-            data: { project_number: projectNumber, label: "Done", is_done: true, sort_order: 0 },
+            data: { project_number: projectNumber, label: "Done", is_done: true, category: "done", sort_order: 0 },
         });
         buckets = [done];
     }
@@ -25,7 +25,11 @@ export async function getProjectBuckets(projectNumber: number): Promise<KpiBucke
     return buckets;
 }
 
-export async function addProjectBucket(projectNumber: number, label: string): Promise<KpiBucketInfo> {
+export async function addProjectBucket(
+    projectNumber: number,
+    label: string,
+    category: Exclude<BucketCategory, "done"> = "active"
+): Promise<KpiBucketInfo> {
     const trimmed = label.trim();
     if (!trimmed) throw new Error("Bucket name can't be empty");
 
@@ -39,9 +43,21 @@ export async function addProjectBucket(projectNumber: number, label: string): Pr
             project_number: projectNumber,
             label: trimmed,
             is_done: false,
+            category,
             sort_order: (maxOrder._max.sort_order ?? -1) + 1,
         },
     });
+}
+
+export async function updateBucketCategory(
+    bucketId: string,
+    category: Exclude<BucketCategory, "done">
+): Promise<KpiBucketInfo> {
+    const bucket = await prisma.projectBucket.findUnique({ where: { id: bucketId } });
+    if (!bucket) throw new Error("Bucket not found");
+    if (bucket.is_done) throw new Error("The Done bucket's type can't be changed");
+
+    return prisma.projectBucket.update({ where: { id: bucketId }, data: { category } });
 }
 
 export async function deleteProjectBucket(bucketId: string): Promise<void> {

@@ -72,6 +72,7 @@ model ProjectBucket {
   project_number Int
   label          String
   is_done        Boolean         @default(false)
+  category       String          @default("active")
   sort_order     Int             @default(0)
   mappings       StatusMapping[]
 

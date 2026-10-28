@@ -3,6 +3,7 @@ import { Task, User, TaskLabel, TaskHistory, Prisma } from "@prisma/client";
 import { addDays, differenceInDays } from "date-fns";
 import { getBucketLookup, lookupBucket } from "@/lib/status-mapping";
 import { KpiBucketInfo } from "@/lib/kpi-buckets";
+import { computeStatusVisits } from "@/lib/task-history";
 
 type TaskWithRelations = Task & {
     labels: TaskLabel[];
@@ -25,6 +26,9 @@ export interface UserKPI {
         completed_tasks: number;
         completion_rate: number;
         avg_cycle_time_days: number | null;
+        // Median time done tasks spent in "active" buckets — the engineer's
+        // own clock, excluding queue, waiting/blocked, and testing.
+        median_active_days: number | null;
         active_tasks: number;
         unmapped_tasks: number;
         // Tasks moved out of a done status back into a not-done one (rework).
@@ -52,6 +56,7 @@ export interface UserKPI {
         is_overdue: boolean;
         done_at: Date | null;
         reopen_count: number;
+        active_ms: number | null;
         story_points: number | null;
         labels: { name: string; color: string | null }[];
         histories: {
@@ -74,6 +79,8 @@ interface TaskCompletion {
     // When the task last entered a done status; null while it's not done.
     doneAt: Date | null;
     reopenCount: number;
+    // Time spent in "active" buckets; null when history never shows one.
+    activeMs: number | null;
 }
 
 type CompletionSource = Pick<Task, "project_number" | "status" | "created_at" | "closed_at"> & {
@@ -108,10 +115,14 @@ export function getTaskCompletion(
     }
 
     const done = isDoneStatus(task.status) === true;
+    const activeVisits = computeStatusVisits(task.histories, task.closed_at, done).filter(
+        (v) => lookupBucket(bucketLookup, task.project_number, v.status)?.category === "active"
+    );
     return {
         done,
         doneAt: done ? doneSince ?? task.closed_at ?? task.created_at : null,
         reopenCount,
+        activeMs: activeVisits.length ? activeVisits.reduce((sum, v) => sum + v.durationMs, 0) : null,
     };
 }
 
@@ -126,6 +137,15 @@ export function isTaskInPeriod(completion: TaskCompletion, filters?: KPIFilters)
     if (filters?.endDate && completion.doneAt >= addDays(filters.endDate, 1)) return false;
     return true;
 }
+
+function median(values: number[]): number | null {
+    if (values.length === 0) return null;
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 function isTaskOverdue(task: TaskWithRelations, done: boolean, now: Date): boolean {
     if (!task.end_date) return false;
@@ -207,6 +227,14 @@ export async function calculateAllUserKPIs(
                     Math.round((totalDays / completedWithDates.length) * 10) / 10;
             }
 
+            const activeDays = median(
+                tasks
+                    .filter(isDone)
+                    .map((t) => completionOf(t).activeMs)
+                    .filter((ms) => ms !== null)
+            );
+            const medianActiveDays = activeDays === null ? null : Math.round((activeDays / MS_PER_DAY) * 10) / 10;
+
             return {
                 user: {
                     id: user.id,
@@ -219,6 +247,7 @@ export async function calculateAllUserKPIs(
                     completed_tasks: completedTasks,
                     completion_rate: Math.round(completionRate * 10) / 10,
                     avg_cycle_time_days: avgCycleTimeDays,
+                    median_active_days: medianActiveDays,
                     active_tasks: activeTasks,
                     unmapped_tasks: unmappedTasks,
                     reopened_tasks: reopenedTasks,
@@ -229,7 +258,7 @@ export async function calculateAllUserKPIs(
                 },
                 tasks: tasks
                     .map((t) => {
-                        const { done, doneAt, reopenCount } = completionOf(t);
+                        const { done, doneAt, reopenCount, activeMs } = completionOf(t);
 
                         return {
                             id: t.id,
@@ -247,6 +276,7 @@ export async function calculateAllUserKPIs(
                             is_overdue: isTaskOverdue(t, done, now),
                             done_at: doneAt,
                             reopen_count: reopenCount,
+                            active_ms: activeMs,
                             story_points: t.story_points ?? null,
                             labels: t.labels.map((l) => ({ name: l.name, color: l.color })),
                             histories: t.histories.map((h) => ({

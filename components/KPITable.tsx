@@ -7,6 +7,7 @@ import Image from "next/image";
 import { SortField } from "@/types/dashboard";
 import { useState, Fragment } from "react";
 import { format } from "date-fns";
+import { formatDuration } from "@/lib/task-history";
 import TaskHistoryModal, { type KpiTask } from "@/components/TaskHistoryModal";
 
 interface KPITableProps {
@@ -101,7 +102,7 @@ const columns: Array<{
         { key: "total_tasks", label: "Total", sortable: true },
         { key: "completed_tasks", label: "Done", sortable: true },
         { key: "completion_rate", label: "Rate", sortable: true },
-        { key: "avg_cycle_time_days", label: "Cycle", sortable: true },
+        { key: "median_active_days", label: "Eng. time", sortable: true },
         { key: "reopened_tasks", label: "Reopened", sortable: true },
         { key: null, label: "Points" },
         { key: null, label: "Active work" },
@@ -252,11 +253,14 @@ export default function KPITable({
                                                 <CompletionBar rate={kpi.metrics.completion_rate} />
                                             </td>
 
-                                            {/* Avg Cycle Time */}
+                                            {/* Median engineering time (time in Active buckets) */}
                                             <td>
-                                                {kpi.metrics.avg_cycle_time_days !== null ? (
-                                                    <span style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-primary)" }}>
-                                                        {kpi.metrics.avg_cycle_time_days}d
+                                                {kpi.metrics.median_active_days !== null ? (
+                                                    <span
+                                                        style={{ fontFamily: "var(--font-mono), monospace", fontSize: "13px", color: "var(--text-primary)" }}
+                                                        title={`Median time in Active statuses per done task, excluding queue, blocked and testing.${kpi.metrics.avg_cycle_time_days !== null ? ` Avg start-to-done: ${kpi.metrics.avg_cycle_time_days}d` : ""}`}
+                                                    >
+                                                        {kpi.metrics.median_active_days}d
                                                     </span>
                                                 ) : (
                                                     <span style={{ color: "var(--text-muted)" }}>—</span>
@@ -391,6 +395,11 @@ export default function KPITable({
                                                                                 {task.is_overdue && (
                                                                                     <span className="badge badge-cancelled" style={{ padding: "2px 7px", fontSize: "10.5px" }}>
                                                                                         overdue
+                                                                                    </span>
+                                                                                )}
+                                                                                {task.is_done && task.active_ms !== null && (
+                                                                                    <span className="badge" style={{ padding: "2px 7px", fontSize: "10.5px" }} title="Time in Active statuses">
+                                                                                        eng {formatDuration(task.active_ms)}
                                                                                     </span>
                                                                                 )}
                                                                                 {task.reopen_count > 0 && (

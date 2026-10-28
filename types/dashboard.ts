@@ -3,6 +3,7 @@ export type SortField =
     | "completed_tasks"
     | "total_tasks"
     | "avg_cycle_time_days"
+    | "median_active_days"
     | "reopened_tasks";
 
 export interface DashboardFilters {

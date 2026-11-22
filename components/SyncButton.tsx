@@ -73,6 +73,9 @@ export default function SyncButton({ onSyncComplete, project }: SyncButtonProps)
     const [scope, setScope] = useState<Scope>(() => loadStoredOptions(project).scope);
     const [skip, setSkip] = useState<string[]>(() => loadStoredOptions(project).skip);
     const [skipCustomized, setSkipCustomized] = useState(() => loadStoredOptions(project).customized);
+    // Optional filtered sync. Empty date = existing full-sync endpoint.
+    const [startDate, setStartDate] = useState("");
+    const [strategy, setStrategy] = useState<"probe" | "updated">("probe");
     const [statuses, setStatuses] = useState<ProjectStatuses[] | null>(null);
     const [statusesLoading, setStatusesLoading] = useState(false);
     const wasRunningRef = useRef(false);
@@ -256,14 +259,26 @@ export default function SyncButton({ onSyncComplete, project }: SyncButtonProps)
         setNotice(null);
 
         try {
-            const res = await fetch("/api/sync/github-project", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    ...(scope === "all" ? {} : { project: scope }),
-                    ...(skip.length > 0 ? { skipStatuses: skip } : {}),
-                }),
-            });
+            const filtered = startDate.trim() !== "";
+            const res = await fetch(
+                filtered ? "/api/sync/github-project/filtered" : "/api/sync/github-project",
+                {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(
+                        filtered
+                            ? {
+                                  ...(scope === "all" ? {} : { project: scope }),
+                                  start_date: startDate,
+                                  strategy,
+                              }
+                            : {
+                                  ...(scope === "all" ? {} : { project: scope }),
+                                  ...(skip.length > 0 ? { skipStatuses: skip } : {}),
+                              }
+                    ),
+                }
+            );
             const data = await res.json().catch(() => ({}));
 
             if (res.ok && data.success) {
@@ -444,44 +459,119 @@ export default function SyncButton({ onSyncComplete, project }: SyncButtonProps)
                     ))}
 
                     <div style={{ fontSize: "10.5px", letterSpacing: "1px", textTransform: "uppercase", color: "var(--text-muted)", margin: "10px 0 6px" }}>
-                        Skip unchanged in…
+                        Filter tanggal (opsional)
                     </div>
-                    {statusesLoading && <div style={{ color: "var(--text-muted)" }}>Loading statuses…</div>}
-                    {!statusesLoading &&
-                        visibleStatuses.map((p) => (
-                            <div key={p.number} style={{ marginBottom: "6px" }}>
-                                {scope === "all" && (
-                                    <div style={{ fontWeight: 700, padding: "2px 4px" }}>{p.label}</div>
-                                )}
-                                {p.options.length === 0 && (
-                                    <div style={{ color: "var(--text-muted)", padding: "2px 4px" }}>
-                                        No statuses known yet
-                                    </div>
-                                )}
-                                {p.options.map((o) => (
-                                    <label
-                                        key={`${p.number}:${o.status}`}
-                                        className="flex items-center gap-2"
-                                        style={{ padding: "4px 4px 4px 14px", cursor: "pointer" }}
-                                    >
-                                        <input
-                                            type="checkbox"
-                                            checked={skip.includes(o.status)}
-                                            onChange={() => toggleSkip(o.status)}
-                                        />
-                                        {o.status}
-                                        {o.isDone && (
-                                            <span style={{ color: "var(--text-muted)" }}>(done)</span>
-                                        )}
-                                    </label>
-                                ))}
+                    <div className="flex gap-2" style={{ alignItems: "center" }}>
+                        <input
+                            type="date"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                            style={{
+                                flex: 1,
+                                minWidth: 0,
+                                padding: "7px 8px",
+                                border: "1.5px solid var(--card-border)",
+                                background: "var(--bg, #fff)",
+                                color: "var(--text-primary)",
+                                fontFamily: "inherit",
+                                fontSize: "12px",
+                            }}
+                        />
+                        {startDate !== "" && (
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setStartDate("");
+                                    setStrategy("probe");
+                                }}
+                                className="neo-btn flex items-center gap-1"
+                                title="Hapus filter tanggal — kembali ke full sync"
+                                style={{ padding: "7px 10px", fontSize: "12px", whiteSpace: "nowrap" }}
+                            >
+                                <XCircle size={12} />
+                                Reset
+                            </button>
+                        )}
+                    </div>
+                    <div style={{ color: "var(--text-muted)", lineHeight: 1.5, marginTop: "4px" }}>
+                        Kosongkan untuk full sync. Jika diisi, hanya item yang terakhir update
+                        sejak tanggal itu — task baru tetap ikut. Tombol Reset mengembalikan
+                        ke full sync.
+                    </div>
+
+                    {startDate !== "" && (
+                        <>
+                            <div style={{ fontSize: "10.5px", letterSpacing: "1px", textTransform: "uppercase", color: "var(--text-muted)", margin: "10px 0 6px" }}>
+                                Strategi
                             </div>
-                        ))}
-                    {!statusesLoading && (
-                        <div style={{ color: "var(--text-muted)", lineHeight: 1.5, marginTop: "2px" }}>
-                            Skipped only when already stored with the same status — new or
-                            changed items always sync.
-                        </div>
+                            <label className="flex items-center gap-2" style={{ padding: "4px 4px", cursor: "pointer" }}>
+                                <input
+                                    type="radio"
+                                    name="sync-strategy"
+                                    checked={strategy === "probe"}
+                                    onChange={() => setStrategy("probe")}
+                                />
+                                Probe (cek konten)
+                            </label>
+                            <label className="flex items-center gap-2" style={{ padding: "4px 4px", cursor: "pointer" }}>
+                                <input
+                                    type="radio"
+                                    name="sync-strategy"
+                                    checked={strategy === "updated"}
+                                    onChange={() => setStrategy("updated")}
+                                />
+                                Updated (cepat)
+                            </label>
+                            <div style={{ color: "var(--text-muted)", lineHeight: 1.5, marginTop: "2px" }}>
+                                Probe memindai semua item dengan field ringan lalu mengambil detail
+                                hanya yang berubah. Updated memakai filter GitHub <code>updated:</code>.
+                            </div>
+                        </>
+                    )}
+
+                    {startDate === "" && (
+                        <>
+                            <div style={{ fontSize: "10.5px", letterSpacing: "1px", textTransform: "uppercase", color: "var(--text-muted)", margin: "10px 0 6px" }}>
+                                Skip unchanged in…
+                            </div>
+                            {statusesLoading && <div style={{ color: "var(--text-muted)" }}>Loading statuses…</div>}
+                            {!statusesLoading &&
+                                visibleStatuses.map((p) => (
+                                    <div key={p.number} style={{ marginBottom: "6px" }}>
+                                        {scope === "all" && (
+                                            <div style={{ fontWeight: 700, padding: "2px 4px" }}>{p.label}</div>
+                                        )}
+                                        {p.options.length === 0 && (
+                                            <div style={{ color: "var(--text-muted)", padding: "2px 4px" }}>
+                                                No statuses known yet
+                                            </div>
+                                        )}
+                                        {p.options.map((o) => (
+                                            <label
+                                                key={`${p.number}:${o.status}`}
+                                                className="flex items-center gap-2"
+                                                style={{ padding: "4px 4px 4px 14px", cursor: "pointer" }}
+                                            >
+                                                <input
+                                                    type="checkbox"
+                                                    checked={skip.includes(o.status)}
+                                                    onChange={() => toggleSkip(o.status)}
+                                                />
+                                                {o.status}
+                                                {o.isDone && (
+                                                    <span style={{ color: "var(--text-muted)" }}>(done)</span>
+                                                )}
+                                            </label>
+                                        ))}
+                                    </div>
+                                ))}
+                            {!statusesLoading && (
+                                <div style={{ color: "var(--text-muted)", lineHeight: 1.5, marginTop: "2px" }}>
+                                    Skipped only when already stored with the same status — new or
+                                    changed items always sync.
+                                </div>
+                            )}
+                        </>
                     )}
 
                     <div className="flex gap-2" style={{ marginTop: "12px" }}>
@@ -491,7 +581,11 @@ export default function SyncButton({ onSyncComplete, project }: SyncButtonProps)
                             style={{ padding: "9px 12px", background: "var(--accent)", fontSize: "12.5px" }}
                         >
                             Start sync · {scopeLabel}
-                            {skip.length > 0 ? ` · skip ${skip.length}` : ""}
+                            {startDate !== ""
+                                ? ` · ${strategy} since ${startDate}`
+                                : skip.length > 0
+                                  ? ` · skip ${skip.length}`
+                                  : ""}
                         </button>
                         <button
                             onClick={() => setMenuOpen(false)}

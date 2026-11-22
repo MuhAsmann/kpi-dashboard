@@ -5,6 +5,20 @@ import { getRecentSyncLogs, getRunningSyncLog } from "@/lib/repository";
 export async function POST(request: NextRequest) {
     try {
         const body = await request.json().catch(() => ({}));
+
+        // Full sync and filtered sync are separate flows. If a date reaches the
+        // full-sync endpoint (e.g. a misrouted client), reject it instead of
+        // silently running a full sync. Valid full-sync requests are unchanged.
+        if (body?.start_date !== undefined) {
+            return NextResponse.json(
+                {
+                    success: false,
+                    error: "start_date is only supported by /api/sync/github-project/filtered",
+                },
+                { status: 400 }
+            );
+        }
+
         const projectNumber = typeof body?.project === "number" ? body.project : undefined;
         const skipStatuses = Array.isArray(body?.skipStatuses)
             ? body.skipStatuses.filter((s: unknown): s is string => typeof s === "string")

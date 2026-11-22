@@ -97,6 +97,32 @@ curl -X POST http://localhost:3000/api/sync/github-project
 
 The sync is **idempotent** — you can run it multiple times safely. It uses GitHub Project item IDs to upsert records.
 
+### Filtered Sync (optional)
+
+The full sync above stays the default. In the **Sync GitHub** popup you can set an optional
+**Start date**; when it is empty the app calls the existing full-sync endpoint, and when it is
+filled the app calls a separate endpoint:
+
+```bash
+curl -X POST http://localhost:3000/api/sync/github-project/filtered \
+  -H 'Content-Type: application/json' \
+  -d '{"project":9,"start_date":"2026-11-01","strategy":"probe"}'
+```
+
+- `start_date` is the lower bound for the item's **last update** time (not `created_at`),
+  interpreted as 00:00 Asia/Jakarta. Old issues that are still active are included; newly
+  created issues are included too.
+- `strategy: "probe"` (default) scans every item with a few lightweight fields, then fetches
+  details only for items whose `item.updatedAt` or `content.updatedAt` is on/after the date.
+  This also catches label/assignee/close changes.
+- `strategy: "updated"` uses the server-side `updated:` filter (cheapest, but content-only
+  changes can be missed).
+- A **Reset** button next to the date clears the filter (and the strategy) and returns the
+  popup to the normal full-sync flow.
+- `project` is optional; omit it to run the filtered sync across all configured boards.
+- No schema change and no cursor: the date is explicit per request. The full-sync
+  endpoint/function is untouched (the full route only rejects a stray `start_date`).
+
 ### View KPI Data
 
 ```bash

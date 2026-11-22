@@ -59,6 +59,156 @@ export interface GitHubProjectData {
   items: GitHubProjectItem[];
 }
 
+/** One project item with only the fields needed to decide whether to refetch it. */
+export interface GitHubProjectItemRef {
+  id: string;
+  updatedAt: string;
+  isArchived: boolean;
+  content: {
+    __typename: string;
+    id?: string;
+    number?: number;
+    createdAt?: string;
+    updatedAt?: string;
+  } | null;
+}
+
+export interface GitHubProjectRefsData {
+  title: string;
+  total: number;
+  refs: GitHubProjectItemRef[];
+}
+
+/**
+ * Detail selection for one ProjectV2Item. Kept identical to the selection in
+ * fetchGitHubProjectItems so a selective refetch returns the same shape the
+ * save path already understands.
+ */
+const PROJECT_ITEM_DETAIL_FIELDS = `
+  id
+  type
+  content {
+    __typename
+    ... on Issue {
+      id
+      number
+      title
+      body
+      url
+      createdAt
+      closedAt
+      state
+      assignees(first: 10) {
+        nodes {
+          login
+          name
+          avatarUrl
+        }
+      }
+      labels(first: 10) {
+        nodes {
+          name
+          color
+        }
+      }
+      repository {
+        nameWithOwner
+      }
+      timelineItems(first: 20, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+        nodes {
+          __typename
+          ... on ProjectV2ItemStatusChangedEvent {
+            createdAt
+            previousStatus
+            status
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+    ... on PullRequest {
+      id
+      number
+      title
+      body
+      url
+      createdAt
+      closedAt: mergedAt
+      state
+      assignees(first: 10) {
+        nodes {
+          login
+          name
+          avatarUrl
+        }
+      }
+      labels(first: 10) {
+        nodes {
+          name
+          color
+        }
+      }
+      repository {
+        nameWithOwner
+      }
+      timelineItems(first: 20, itemTypes: [PROJECT_V2_ITEM_STATUS_CHANGED_EVENT]) {
+        nodes {
+          __typename
+          ... on ProjectV2ItemStatusChangedEvent {
+            createdAt
+            previousStatus
+            status
+          }
+        }
+        pageInfo {
+          hasNextPage
+          endCursor
+        }
+      }
+    }
+  }
+  fieldValues(first: 20) {
+    nodes {
+      __typename
+      ... on ProjectV2ItemFieldSingleSelectValue {
+        name
+        field {
+          ... on ProjectV2SingleSelectField {
+            name
+          }
+        }
+      }
+      ... on ProjectV2ItemFieldTextValue {
+        text
+        field {
+          ... on ProjectV2Field {
+            name
+          }
+        }
+      }
+      ... on ProjectV2ItemFieldDateValue {
+        date
+        field {
+          ... on ProjectV2Field {
+            name
+          }
+        }
+      }
+      ... on ProjectV2ItemFieldNumberValue {
+        number
+        field {
+          ... on ProjectV2Field {
+            name
+          }
+        }
+      }
+    }
+  }
+`;
+
 /** Thrown when a running sync is cancelled by the user. */
 export class SyncCancelledError extends Error {
   constructor() {
@@ -104,19 +254,24 @@ export async function fetchGitHubProjectItems(
   projectNumber: number,
   ownerType: "user" | "organization" = "user",
   onProgress?: (fetched: number, total: number | null) => void,
-  shouldAbort?: () => Promise<boolean>
+  shouldAbort?: () => Promise<boolean>,
+  options: { filter?: string } = {}
 ): Promise<GitHubProjectData> {
   const ownerQuery =
     ownerType === "organization"
       ? `organization(login: "${ownerLogin}")`
       : `user(login: "${ownerLogin}")`;
 
+  // `filter` is optional so the full-sync request stays byte-for-byte the same
+  // as before (no `query` argument at all when it is absent).
+  const filter = options.filter?.trim() || "";
+
   const query = `
-    query GetProjectItems($after: String, $first: Int!) {
+    query GetProjectItems($after: String, $first: Int!${filter ? ", $query: String!" : ""}) {
       ${ownerQuery} {
         projectV2(number: ${projectNumber}) {
           title
-          items(first: $first, after: $after) {
+          items(first: $first, after: $after${filter ? ", query: $query" : ""}) {
             totalCount
             pageInfo {
               hasNextPage
@@ -267,7 +422,11 @@ export async function fetchGitHubProjectItems(
     if (shouldAbort && (await shouldAbort())) {
       throw new SyncCancelledError();
     }
-    const variables: Record<string, string | number | null> = { after: cursor, first: pageSize };
+    const variables: Record<string, string | number | null> = {
+      after: cursor,
+      first: pageSize,
+      ...(filter ? { query: filter } : {}),
+    };
 
     const response = await fetch(GITHUB_GRAPHQL_URL, {
       method: "POST",
@@ -333,6 +492,218 @@ export async function fetchGitHubProjectItems(
     title: projectTitle,
     items: allItems,
   };
+}
+
+/**
+ * Lightweight scan of every project item: only id/timestamps/content type, no
+ * fieldValues or timeline. Used by the filtered sync's `probe` strategy to
+ * decide which items actually need a detail refetch.
+ */
+interface ProjectItemRefsPageInfo {
+  hasNextPage: boolean;
+  endCursor: string | null;
+}
+
+interface ProjectItemRefsItems {
+  totalCount: number;
+  pageInfo: ProjectItemRefsPageInfo;
+  nodes: Array<GitHubProjectItemRef | null>;
+}
+
+interface ProjectItemRefsProject {
+  title: string;
+  items: ProjectItemRefsItems;
+}
+
+interface ProjectItemRefsOwner {
+  projectV2?: ProjectItemRefsProject;
+}
+
+interface ProjectItemRefsResponse {
+  errors?: unknown;
+  data?: {
+    organization?: ProjectItemRefsOwner;
+    user?: ProjectItemRefsOwner;
+  };
+}
+
+export async function fetchProjectItemRefs(
+  ownerLogin: string,
+  projectNumber: number,
+  ownerType: "user" | "organization" = "user",
+  onProgress?: (fetched: number, total: number | null) => void,
+  shouldAbort?: () => Promise<boolean>
+): Promise<GitHubProjectRefsData> {
+  const ownerQuery =
+    ownerType === "organization"
+      ? `organization(login: "${ownerLogin}")`
+      : `user(login: "${ownerLogin}")`;
+
+  const query = `
+    query GetProjectItemRefs($after: String, $first: Int!) {
+      ${ownerQuery} {
+        projectV2(number: ${projectNumber}) {
+          title
+          items(first: $first, after: $after) {
+            totalCount
+            pageInfo {
+              hasNextPage
+              endCursor
+            }
+            nodes {
+              id
+              updatedAt
+              isArchived
+              content {
+                __typename
+                ... on Issue {
+                  id
+                  number
+                  createdAt
+                  updatedAt
+                }
+                ... on PullRequest {
+                  id
+                  number
+                  createdAt
+                  updatedAt
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  const refs: GitHubProjectItemRef[] = [];
+  let cursor: string | null = null;
+  let hasNextPage = true;
+  let total = 0;
+  let projectTitle = "";
+  const pageSize = 100;
+
+  while (hasNextPage) {
+    if (shouldAbort && (await shouldAbort())) {
+      throw new SyncCancelledError();
+    }
+
+    const response: Response = await fetch(GITHUB_GRAPHQL_URL, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ query, variables: { after: cursor, first: pageSize } }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GitHub API error: ${response.status} - ${text}`);
+    }
+
+    const data = (await response.json()) as ProjectItemRefsResponse;
+    if (data.errors) {
+      throw new Error(`GraphQL errors: ${JSON.stringify(data.errors, null, 2)}`);
+    }
+
+    const owner = data.data?.[ownerType === "organization" ? "organization" : "user"];
+    const project = owner?.projectV2;
+    if (!project) {
+      throw new Error(
+        `Project #${projectNumber} not found for ${ownerLogin}. Make sure the project exists and token has access.`
+      );
+    }
+
+    projectTitle = project.title || projectTitle;
+    const items = project.items;
+    if (typeof items.totalCount === "number") total = items.totalCount;
+    for (const node of items.nodes || []) {
+      if (node) refs.push(node as GitHubProjectItemRef);
+    }
+    onProgress?.(refs.length, total || null);
+
+    hasNextPage = items.pageInfo.hasNextPage;
+    cursor = items.pageInfo.endCursor;
+  }
+
+  return { title: projectTitle, total, refs };
+}
+
+/** Batch size for selective detail fetches; kept small so one response stays light. */
+export const PROJECT_ITEM_DETAIL_BATCH_SIZE = 25;
+
+/**
+ * Fetch full details for a set of ProjectV2Item ids via `nodes(ids:)`. This is
+ * used after the shallow scan so unchanged items never pay for fieldValues /
+ * timeline payloads.
+ */
+export async function fetchProjectItemsByIds(
+  ids: string[],
+  onProgress?: (fetched: number, total: number) => void,
+  shouldAbort?: () => Promise<boolean>
+): Promise<GitHubProjectItem[]> {
+  const query = `
+    query GetProjectItemsByIds($ids: [ID!]!) {
+      nodes(ids: $ids) {
+        ... on ProjectV2Item {
+          ${PROJECT_ITEM_DETAIL_FIELDS}
+        }
+      }
+    }
+  `;
+
+  const items: GitHubProjectItem[] = [];
+
+  for (let i = 0; i < ids.length; i += PROJECT_ITEM_DETAIL_BATCH_SIZE) {
+    if (shouldAbort && (await shouldAbort())) {
+      throw new SyncCancelledError();
+    }
+
+    const batch = ids.slice(i, i + PROJECT_ITEM_DETAIL_BATCH_SIZE);
+    const response = await fetch(GITHUB_GRAPHQL_URL, {
+      method: "POST",
+      headers: getHeaders(),
+      body: JSON.stringify({ query, variables: { ids: batch } }),
+    });
+
+    if (!response.ok) {
+      const text = await response.text();
+      throw new Error(`GitHub API error: ${response.status} - ${text}`);
+    }
+
+    const data = await response.json();
+    if (data.errors) {
+      throw new Error(`GraphQL errors: ${JSON.stringify(data.errors, null, 2)}`);
+    }
+
+    for (const node of data.data?.nodes || []) {
+      if (node) items.push(node as GitHubProjectItem);
+    }
+    onProgress?.(items.length, ids.length);
+  }
+
+  return items;
+}
+
+/**
+ * Fill in status-change history beyond the first 20 events for items fetched
+ * selectively. The full-sync path keeps its own copy of this loop; this helper
+ * is additive for the filtered path.
+ */
+export async function topUpProjectItemTimelines(
+  items: GitHubProjectItem[],
+  shouldAbort?: () => Promise<boolean>
+): Promise<void> {
+  for (const item of items) {
+    if (shouldAbort && (await shouldAbort())) {
+      throw new SyncCancelledError();
+    }
+    const content = item.content;
+    let pageInfo = content?.timelineItems?.pageInfo;
+    while (content?.timelineItems && pageInfo?.hasNextPage) {
+      const more = await fetchMoreTimelineItems(content.id!, pageInfo.endCursor);
+      content.timelineItems.nodes.push(...more.nodes);
+      pageInfo = more.pageInfo;
+    }
+  }
 }
 
 async function fetchMoreTimelineItems(

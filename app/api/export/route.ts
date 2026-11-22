@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getBucketLookup, lookupBucket } from "@/lib/status-mapping";
-import { computeStatusVisits, formatDuration, summarizeStatusVisits } from "@/lib/task-history";
+import { computeStatusVisits, formatDuration, formatStatusTimeline, summarizeStatusVisits } from "@/lib/task-history";
 
 export async function GET(request: NextRequest) {
     try {
@@ -56,6 +56,7 @@ export async function GET(request: NextRequest) {
             "Project Title",
             "Status",
             "Time in Status",
+            "Timeline",
             "Story Points",
             "Type",
             "Created At",
@@ -74,11 +75,11 @@ export async function GET(request: NextRequest) {
 
         const rows = tasks.map(t => {
             const isDone = lookupBucket(bucketLookup, t.project_number, t.status)?.is_done === true;
-            const timeInStatus = summarizeStatusVisits(
-                computeStatusVisits(t.histories, t.closed_at, isDone),
-            )
+            const visits = computeStatusVisits(t.histories, t.closed_at, isDone);
+            const timeInStatus = summarizeStatusVisits(visits)
                 .map(({ status, totalMs }) => `${status}: ${formatDuration(totalMs)}`)
                 .join("; ");
+            const timeline = formatStatusTimeline(visits);
 
             return [
                 escapeCsv(t.github_issue_id),
@@ -89,6 +90,7 @@ export async function GET(request: NextRequest) {
                 escapeCsv(t.project_title),
                 escapeCsv(t.status),
                 escapeCsv(timeInStatus),
+                escapeCsv(timeline),
                 escapeCsv(t.story_points?.toString()),
                 escapeCsv(t.type),
                 escapeCsv(t.created_at?.toISOString()),

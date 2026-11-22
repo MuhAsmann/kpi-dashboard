@@ -177,11 +177,18 @@ function DashboardContent() {
         };
     };
 
-    // Filters read from the URL first (shareable/bookmarkable links, survives
-    // a page refresh), falling back to the last-used filters in localStorage
-    // when there's nothing in the URL (e.g. navigated here via a plain sidebar
-    // link, which has no query string) instead of resetting to defaults.
-    const [filters, setFilters] = useState<DashboardFilters>(() => {
+    // Filters are initialized to defaults so the first client render matches
+    // the SSR HTML. URL/localStorage are applied in an effect after mount —
+    // reading them during render causes hydration mismatches (server renders
+    // "All projects", client renders e.g. "be-alwin" from localStorage).
+    const [filters, setFilters] = useState<DashboardFilters>(() => getDefaultFilters());
+    const [filtersReady, setFiltersReady] = useState(false);
+
+    // Hydrate filters from the URL first (shareable/bookmarkable links),
+    // falling back to the last-used filters in localStorage when there's
+    // nothing in the URL (e.g. navigated here via a plain sidebar link,
+    // which has no query string) instead of resetting to defaults.
+    useEffect(() => {
         const defaults = getDefaultFilters();
         const query = new URLSearchParams(searchParams.toString());
         const hasUrlFilters =
@@ -190,29 +197,34 @@ function DashboardContent() {
         if (hasUrlFilters) {
             const project = query.get("project");
             const parsedProject = project ? Number.parseInt(project, 10) : NaN;
-            return {
+            setFilters({
                 ...defaults,
                 startDate: query.has("start_date") ? query.get("start_date") ?? "" : defaults.startDate,
                 endDate: query.has("end_date") ? query.get("end_date") ?? "" : defaults.endDate,
                 repository: query.getAll("repository"),
                 project: Number.isInteger(parsedProject) ? parsedProject : "",
-            };
-        }
-
-        try {
-            const raw = window.localStorage.getItem("dashboard-filters");
-            if (raw) {
-                const parsed: unknown = JSON.parse(raw);
-                if (isDashboardFilters(parsed)) return parsed;
+            });
+        } else {
+            try {
+                const raw = window.localStorage.getItem("dashboard-filters");
+                if (raw) {
+                    const parsed: unknown = JSON.parse(raw);
+                    if (isDashboardFilters(parsed)) setFilters(parsed);
+                }
+            } catch {
+                // localStorage unavailable — keep defaults.
             }
-        } catch {
-            // localStorage unavailable — fall through to defaults.
         }
-        return defaults;
-    });
+        setFiltersReady(true);
+        // Run once on mount; searchParams is read here intentionally.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     // Keep the URL in sync with the current filters (shareable/bookmarkable).
+    // Gated on filtersReady so the default filters don't overwrite a
+    // shareable URL before hydration has applied it.
     useEffect(() => {
+        if (!filtersReady) return;
         const params = new URLSearchParams(searchParams.toString());
         params.delete("start_date");
         params.delete("end_date");
@@ -227,17 +239,18 @@ function DashboardContent() {
         if (nextQuery !== searchParams.toString()) {
             router.replace(`${pathname}?${nextQuery}`, { scroll: false });
         }
-    }, [filters, pathname, router, searchParams]);
+    }, [filters, pathname, router, searchParams, filtersReady]);
 
     // Also persist so navigating away and back (which drops the URL query)
     // still restores the last-used filters instead of resetting to defaults.
     useEffect(() => {
+        if (!filtersReady) return;
         try {
             window.localStorage.setItem("dashboard-filters", JSON.stringify(filters));
         } catch {
             // localStorage unavailable (e.g. private browsing) — ignore.
         }
-    }, [filters]);
+    }, [filters, filtersReady]);
 
     const sortKPIs = useCallback(
         (data: UserKPI[], sortBy: SortField, sortOrder: "asc" | "desc"): UserKPI[] => {
@@ -310,8 +323,9 @@ function DashboardContent() {
     }, [filters, sortKPIs]);
 
     useEffect(() => {
+        if (!filtersReady) return;
         fetchData();
-    }, [fetchData]);
+    }, [fetchData, filtersReady]);
 
     const handleFilterChange = (newFilters: Partial<DashboardFilters>) => {
         setFilters((prev) => ({ ...prev, ...newFilters }));
